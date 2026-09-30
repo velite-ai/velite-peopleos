@@ -212,7 +212,7 @@ People directory and employee record show coloured initials as placeholders.
 
 Two pieces of work:
 
-1. **Employee photos** — add a column to `employees` (an object key, following the
+1. **Employee photos** — ✅ DONE (Sep 2026, migration 022, `/api/employees/[id]/photo`; uploads go via the app server, not browser→MinIO, because CSP is `connect-src 'self'`; JPG/PNG/WebP ≤2 MB, magic-byte checked). Original plan: add a column to `employees` (an object key, following the
    `documents` pattern), an upload endpoint, and display in the record header and
    directory. Self-contained.
 2. **Documents tab** — a tab in the employee record wired to the existing intent
