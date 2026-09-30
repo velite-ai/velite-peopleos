@@ -2,7 +2,8 @@
 /* Employee record payloads are permission-shaped by the server. */
 /* eslint-disable @typescript-eslint/no-explicit-any, react-hooks/set-state-in-effect */
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { EmployeePhoto } from "@/components/employee-photo";
 
 type DirectoryPerson = {
   id: string;
@@ -31,12 +32,13 @@ async function optionalData(path: string) {
   return requiredData(response);
 }
 
-export function EmployeeRecordDrawer({ person, people, onClose, onChanged, onDeleted, flash }: {
+export function EmployeeRecordDrawer({ person, people, onClose, onChanged, onDeleted, onPhotoChanged, flash }: {
   person: DirectoryPerson;
   people: DirectoryPerson[];
   onClose: () => void;
   onChanged: () => void;
   onDeleted: () => void;
+  onPhotoChanged?: () => void;
   flash: (message: string) => void;
 }) {
   const [tab, setTab] = useState<Tab>("employment");
@@ -53,6 +55,10 @@ export function EmployeeRecordDrawer({ person, people, onClose, onChanged, onDel
   const [cycles, setCycles] = useState<any[] | null>(null);
   const [letters, setLetters] = useState<any[] | null>(null);
   const [departments, setDepartments] = useState<any[]>([]);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const photoInput = useRef<HTMLInputElement>(null);
+  const photoChanged = useRef(false);
+  const closeRecord = useCallback(() => { onClose(); if (photoChanged.current) onPhotoChanged?.(); }, [onClose, onPhotoChanged]);
 
   const load = useCallback(async () => {
     setBusy(true);
@@ -83,9 +89,9 @@ export function EmployeeRecordDrawer({ person, people, onClose, onChanged, onDel
 
   useEffect(() => { load(); }, [load, refresh]);
   useEffect(() => {
-    const escape = (event: KeyboardEvent) => { if (event.key === "Escape" && !form) onClose(); };
+    const escape = (event: KeyboardEvent) => { if (event.key === "Escape" && !form) closeRecord(); };
     document.addEventListener("keydown", escape); return () => document.removeEventListener("keydown", escape);
-  }, [form, onClose]);
+  }, [form, closeRecord]);
 
   const employee = record?.employee;
   const initials = person.name.split(/\s+/).map(part => part[0]).slice(0, 2).join("").toUpperCase();
@@ -94,6 +100,18 @@ export function EmployeeRecordDrawer({ person, people, onClose, onChanged, onDel
     const checks = [employee.department_id, employee.reporting_manager_id, employee.grade, employee.work_email, employee.probation_end_date || employee.confirmation_date, personal?.completion?.personalDetails || personal?.personalDetails, emergency?.contacts?.length, sensitive?.bankDetails, sensitive?.statutoryDetails];
     return Math.round(checks.filter(Boolean).length / checks.length * 100);
   }, [employee, personal, emergency, sensitive]);
+
+  async function changePhoto(file: File | undefined, remove = false) {
+    if (!remove && !file) return;
+    setPhotoBusy(true);
+    try {
+      const url = `/api/employees/${encodeURIComponent(person.id)}/photo`;
+      if (remove) await requiredData(await fetch(url, { method: "DELETE" }));
+      else { const body = new FormData(); body.set("photo", file!); await requiredData(await fetch(url, { method: "POST", body })); }
+      photoChanged.current = true; setRefresh(value => value + 1); flash(remove ? "Photo removed." : "Photo saved.");
+    } catch (error) { flash((error as Error).message); }
+    finally { setPhotoBusy(false); if (photoInput.current) photoInput.current.value = ""; }
+  }
 
   async function decideLetter(letter: any) {
     if (letter.status !== "pending") return flash(`This letter is already ${friendly(letter.status).toLowerCase()}.`);
@@ -125,11 +143,11 @@ export function EmployeeRecordDrawer({ person, people, onClose, onChanged, onDel
     } catch (error) { flash((error as Error).message); }
   }
 
-  return <div className="record-backdrop" onMouseDown={event => { if (event.target === event.currentTarget && !form) onClose(); }}>
+  return <div className="record-backdrop" onMouseDown={event => { if (event.target === event.currentTarget && !form) closeRecord(); }}>
     <section className="employee-record" role="dialog" aria-modal="true" aria-label={`${person.name} employee record`}>
       <header className="record-header">
-        <button className="record-close" onClick={onClose} aria-label="Close employee record">×</button>
-        <div className="record-identity"><div className="record-avatar">{initials}</div><div><span className="eyebrow">EMPLOYEE RECORD · {person.code}</span><h2>{employee ? [employee.first_name, employee.last_name].filter(Boolean).join(" ") : person.name}</h2><p>{employee?.position || "Loading…"} · {employee?.department || employee?.business_head || "Velite"}</p></div></div>
+        <button className="record-close" onClick={closeRecord} aria-label="Close employee record">×</button>
+        <div className="record-identity"><div className="record-photo"><EmployeePhoto id={person.id} version={employee?.photo_updated_at} initials={initials} className="record-avatar" /><input ref={photoInput} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={event => changePhoto(event.target.files?.[0])} /><div className="record-photo-actions"><button type="button" disabled={photoBusy || !employee} onClick={() => photoInput.current?.click()}>{photoBusy ? "Saving…" : employee?.photo_updated_at ? "Change photo" : "Add photo"}</button>{employee?.photo_updated_at && <button type="button" disabled={photoBusy} onClick={() => changePhoto(undefined, true)}>Remove</button>}</div></div><div><span className="eyebrow">EMPLOYEE RECORD · {person.code}</span><h2>{employee ? [employee.first_name, employee.last_name].filter(Boolean).join(" ") : person.name}</h2><p>{employee?.position || "Loading…"} · {employee?.department || employee?.business_head || "Velite"}</p></div></div>
         <div className="record-summary"><div><span>Record complete</span><strong>{completion}%</strong></div><i><b style={{ width: `${completion}%` }} /></i><em className={`status ${String(employee?.status || "active").replaceAll("_", "-")}`}>{friendly(employee?.status || "active")}</em></div>
       </header>
       <nav className="record-tabs" aria-label="Employee record sections">
