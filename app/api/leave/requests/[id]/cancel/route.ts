@@ -1,0 +1,84 @@
+import { z } from "zod";
+import { apiError, fail, ok, requireApiUser } from "@/lib/api";
+import { hasPermissionForScope } from "@/lib/auth";
+import { db } from "@/lib/database";
+
+const schema = z.object({ reason: z.string().min(3).max(1000) });
+
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const { id } = await params;
+    const input = schema.parse(await request.json());
+    const sql = db();
+    const [record] = await sql<{
+      id: string;
+      status: string;
+      employee_id: string;
+      employee_user_id: string | null;
+      business_head_id: string;
+      department_id: string | null;
+      leave_policy_id: string;
+      start_date: string;
+      days: number;
+      derived_work_dates: string[];
+    }[]>`
+      SELECT r.id,r.status,r.employee_id,e.user_id AS employee_user_id,e.business_head_id,e.department_id,
+        r.leave_policy_id,r.start_date,r.days,r.derived_work_dates
+      FROM leave_requests r JOIN employees e ON e.id=r.employee_id WHERE r.id=${id}
+    `;
+    if (!record) return fail("Leave request not found", 404);
+    const actor = await requireApiUser();
+    if (actor instanceof Response) return actor;
+    const self = record.employee_user_id === actor.id;
+    const privileged = hasPermissionForScope(actor, "leave:write", record.business_head_id, record.department_id);
+    if (!self && !privileged) return fail("You do not have permission to cancel this leave request", 403);
+    if (!self && actor.mfaEnrollmentRequired) return fail("Multi-factor authentication enrollment is required", 403, { code: "MFA_ENROLLMENT_REQUIRED" });
+    if (!["pending", "approved"].includes(record.status)) return fail("Only pending or approved leave can be cancelled", 409);
+    if (self && record.start_date < new Date().toISOString().slice(0, 10)) return fail("Past leave can only be corrected by HR", 409);
+    const result = await sql.begin(async tx => {
+      await tx`SELECT pg_advisory_xact_lock(hashtext(${`leave:${record.employee_id}:${record.leave_policy_id}`}))`;
+      const [locked] = await tx`SELECT * FROM leave_requests WHERE id=${record.id} FOR UPDATE`;
+      if (!locked || !["pending", "approved"].includes(locked.status)) return { error: "status" as const };
+      if (locked.status === "approved") {
+        const closedMonths = await tx`
+          SELECT period_month,status FROM attendance_months
+          WHERE business_head_id=${record.business_head_id} AND status<>'open'
+            AND period_month IN (
+              SELECT DISTINCT date_trunc('month',value::date)::date
+              FROM jsonb_array_elements_text(${JSON.stringify(record.derived_work_dates)}::jsonb) dates(value)
+            )
+        `;
+        if (closedMonths.length) return { error: "attendance_month" as const, closedMonths };
+        const protectedAttendance = await tx`
+          SELECT id,attendance_date FROM attendance_days
+          WHERE employee_id=${record.employee_id} AND source=${`leave:${record.id}`} AND locked_at IS NOT NULL
+          LIMIT 1
+        `;
+        if (protectedAttendance.length) return { error: "attendance_locked" as const };
+        await tx`DELETE FROM attendance_days WHERE employee_id=${record.employee_id} AND source=${`leave:${record.id}`} AND locked_at IS NULL`;
+        await tx`
+          INSERT INTO leave_ledger (
+            employee_id,leave_policy_id,transaction_date,quantity,transaction_type,reference_type,reference_id,remarks,created_by,idempotency_key
+          ) VALUES (
+            ${record.employee_id},${record.leave_policy_id},current_date,${Number(record.days)},'leave_cancelled','leave_cancellation',${record.id},
+            ${input.reason},${actor.id},${`leave:cancel:${record.id}`}
+          ) ON CONFLICT (idempotency_key) DO NOTHING
+        `;
+      }
+      const [updated] = await tx`
+        UPDATE leave_requests SET status='cancelled',cancelled_by=${actor.id},cancelled_at=now()
+        WHERE id=${record.id} AND status IN ('pending','approved') RETURNING *
+      `;
+      if (!updated) return { error: "status" as const };
+      await tx`
+        INSERT INTO audit_events (actor_user_id,action,entity_type,entity_id,business_head_id,before_data,after_data,reason)
+        VALUES (${actor.id},'leave.cancel','leave_request',${record.id},${record.business_head_id},${JSON.stringify({ status: locked.status })}::jsonb,${JSON.stringify({ status: "cancelled", restoredDays: locked.status === "approved" ? Number(record.days) : 0 })}::jsonb,${input.reason})
+      `;
+      return { updated };
+    });
+    if ("error" in result && result.error === "status") return fail("Leave status changed; refresh and try again", 409);
+    if ("error" in result && result.error === "attendance_month") return fail("Attendance is already under review or locked for part of this leave", 409, result.closedMonths);
+    if ("error" in result && result.error === "attendance_locked") return fail("Attendance generated by this leave is locked and cannot be cancelled directly", 409);
+    return ok(result.updated);
+  } catch (error) { return apiError(error); }
+}

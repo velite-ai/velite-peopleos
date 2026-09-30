@@ -1,0 +1,14 @@
+import { z } from "zod";
+import { db } from "@/lib/database";
+import { apiError, ok, requireApiUser } from "@/lib/api";
+import { hasRoleForScope } from "@/lib/auth";
+
+const createSchema = z.object({ employeeCode:z.string().min(2).max(30), businessHeadId:z.uuid(), departmentId:z.uuid().nullable().optional(), firstName:z.string().min(1).max(80), lastName:z.string().max(80).optional(), position:z.string().min(2).max(120), dateJoined:z.iso.date(), workEmail:z.email().optional(), employmentType:z.string().max(40).default('permanent') });
+
+export async function GET(request: Request) {
+  try { const url=new URL(request.url); const head=url.searchParams.get('businessHeadId'); const department=url.searchParams.get('departmentId'); const user=await requireApiUser('people:read',head,department); if(user instanceof Response)return user; const q=url.searchParams.get('q')||'';const broad=hasRoleForScope(user,['HR_ADMIN','HR_OPERATIONS','DEPARTMENT_HEAD','LEADERSHIP','AUDITOR'],head,department);const actorEmployees=broad?[]:await db()<{id:string}[]>`SELECT id FROM employees WHERE user_id=${user.id}`;const actorEmployee=actorEmployees[0]; const rows=await db()`SELECT e.id,e.employee_code,e.first_name,e.last_name,e.position,e.status,e.date_joined,e.probation_end_date,e.business_head_id,e.department_id,b.name AS business_head,d.name AS department FROM employees e JOIN business_heads b ON b.id=e.business_head_id LEFT JOIN departments d ON d.id=e.department_id WHERE e.status<>'archived' AND (${head}::uuid IS NULL OR e.business_head_id=${head}::uuid) AND (${department}::uuid IS NULL OR e.department_id=${department}::uuid) AND (${broad} OR e.id=${actorEmployee?.id||null}::uuid OR e.reporting_manager_id=${actorEmployee?.id||null}::uuid) AND (${q}='' OR concat_ws(' ',e.first_name,e.last_name,e.employee_code,e.position) ILIKE ${`%${q}%`}) ORDER BY e.first_name LIMIT 200`; return ok(rows); } catch(e){return apiError(e);}
+}
+
+export async function POST(request: Request) {
+  try { const input=createSchema.parse(await request.json()); const user=await requireApiUser('people:write',input.businessHeadId,input.departmentId); if(user instanceof Response)return user; const sql=db(); const [employee]=await sql.begin(async tx=>{ const rows=await tx`INSERT INTO employees (employee_code,business_head_id,department_id,first_name,last_name,position,date_joined,work_email,employment_type) VALUES (${input.employeeCode},${input.businessHeadId},${input.departmentId||null},${input.firstName},${input.lastName||null},${input.position},${input.dateJoined},${input.workEmail||null},${input.employmentType}) RETURNING *`; await tx`INSERT INTO audit_events (actor_user_id,action,entity_type,entity_id,business_head_id,after_data,reason) VALUES (${user.id},'employee.create','employee',${rows[0].id},${input.businessHeadId},${JSON.stringify(rows[0])}::jsonb,'Employee created')`; return rows; }); return ok(employee,{status:201}); } catch(e){return apiError(e);}
+}

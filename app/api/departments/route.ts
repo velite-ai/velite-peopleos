@@ -1,0 +1,7 @@
+import { z } from "zod";
+import { apiError, ok, requireApiUser } from "@/lib/api";
+import { db } from "@/lib/database";
+
+const schema=z.object({businessHeadId:z.uuid(),code:z.string().min(2).max(30),name:z.string().min(2).max(120),parentId:z.uuid().nullable().optional()});
+export async function GET(request:Request){try{const head=new URL(request.url).searchParams.get('businessHeadId');const user=await requireApiUser('people:read',head);if(user instanceof Response)return user;return ok(await db()`SELECT d.id,d.business_head_id,d.code,d.name,d.parent_id,p.name AS parent_name,d.active FROM departments d LEFT JOIN departments p ON p.id=d.parent_id WHERE d.active=true AND (${head}::uuid IS NULL OR d.business_head_id=${head}::uuid) ORDER BY d.name`);}catch(e){return apiError(e);}}
+export async function POST(request:Request){try{const input=schema.parse(await request.json());const user=await requireApiUser('people:write',input.businessHeadId);if(user instanceof Response)return user;const [row]=await db().begin(async tx=>{const rows=await tx`INSERT INTO departments (business_head_id,code,name,parent_id) VALUES (${input.businessHeadId},${input.code},${input.name},${input.parentId||null}) RETURNING *`;await tx`INSERT INTO audit_events (actor_user_id,action,entity_type,entity_id,business_head_id,after_data,reason) VALUES (${user.id},'department.create','department',${rows[0].id},${input.businessHeadId},${JSON.stringify(rows[0])}::jsonb,'Department created')`;return rows;});return ok(row,{status:201});}catch(e){return apiError(e);}}

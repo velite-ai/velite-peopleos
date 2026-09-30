@@ -1,0 +1,9 @@
+import { randomBytes } from "node:crypto";
+import { z } from "zod";
+import { apiError, ok, requireApiUser } from "@/lib/api";
+import { db } from "@/lib/database";
+import { sealJson } from "@/lib/encryption";
+
+const schema=z.object({code:z.string().regex(/^[A-Z][A-Z0-9_]{1,39}$/),endpointUrl:z.url().refine(value=>new URL(value).protocol==='https:',{message:'Webhook endpoint must use HTTPS'}),eventTypes:z.array(z.string().regex(/^[a-z][a-z0-9_.]{1,79}$/)).min(1).max(100),reason:z.string().min(5).max(1000)});
+export async function GET(){try{const user=await requireApiUser('admin:users');if(user instanceof Response)return user;return ok(await db()`SELECT w.id,w.code,w.endpoint_url,w.event_types,w.active,w.created_at,u.full_name AS created_by_name,(SELECT count(*)::int FROM webhook_deliveries d WHERE d.webhook_id=w.id AND d.status='failed') AS failed_deliveries FROM outbound_webhooks w JOIN users u ON u.id=w.created_by ORDER BY w.code`);}catch(error){return apiError(error);}}
+export async function POST(request:Request){try{const input=schema.parse(await request.json());const user=await requireApiUser('admin:users');if(user instanceof Response)return user;const secret=randomBytes(32).toString('base64url');const [created]=await db().begin(async tx=>{const rows=await tx`INSERT INTO outbound_webhooks (code,endpoint_url,signing_secret_encrypted,event_types,created_by) VALUES (${input.code},${input.endpointUrl},${sealJson({secret})},${JSON.stringify(input.eventTypes)}::jsonb,${user.id}) RETURNING id,code,endpoint_url,event_types,active,created_at`;await tx`INSERT INTO audit_events (actor_user_id,action,entity_type,entity_id,after_data,reason) VALUES (${user.id},'webhook.create','outbound_webhook',${rows[0].id},${JSON.stringify(rows[0])}::jsonb,${input.reason})`;return rows;});return ok({webhook:created,signingSecret:secret,warning:'Copy the signing secret now. It will not be shown again.'},{status:201});}catch(error){return apiError(error);}}
