@@ -13,7 +13,8 @@ type DirectoryPerson = {
   departmentId: string | null;
 };
 
-type Tab = "employment" | "personal" | "pay" | "growth" | "letters" | "timeline";
+const DOCUMENT_CATEGORIES: [string, string][] = [["identity", "Identity proof"], ["address_proof", "Address proof"], ["education", "Education certificate"], ["experience", "Previous employment"], ["contract", "Contract or offer letter"], ["bank", "Bank details"], ["tax", "Tax"], ["health", "Health"], ["background_check", "Background check"], ["other", "Other"]];
+type Tab = "employment" | "personal" | "pay" | "growth" | "letters" | "documents" | "timeline";
 type FormKind = "employment" | "personal" | "emergency" | "sensitive" | "compensation" | "skill" | "plan" | "letter" | "delete";
 
 const friendly = (value: unknown) => String(value || "—").replaceAll("_", " ").replace(/\b\w/g, letter => letter.toUpperCase());
@@ -55,6 +56,11 @@ export function EmployeeRecordDrawer({ person, people, onClose, onChanged, onDel
   const [cycles, setCycles] = useState<any[] | null>(null);
   const [letters, setLetters] = useState<any[] | null>(null);
   const [departments, setDepartments] = useState<any[]>([]);
+  const [documents, setDocuments] = useState<any[] | null>(null);
+  const [docBusy, setDocBusy] = useState(false);
+  const [docCategory, setDocCategory] = useState("");
+  const [docExpiry, setDocExpiry] = useState("");
+  const docInput = useRef<HTMLInputElement>(null);
   const [photoBusy, setPhotoBusy] = useState(false);
   const photoInput = useRef<HTMLInputElement>(null);
   const photoChanged = useRef(false);
@@ -76,10 +82,11 @@ export function EmployeeRecordDrawer({ person, people, onClose, onChanged, onDel
         optionalData(`/api/performance/cycles?businessHeadId=${head}`),
         optionalData(`/api/employee-letters?businessHeadId=${head}&employeeId=${employee}`),
         optionalData(`/api/departments?businessHeadId=${head}`),
+        optionalData(`/api/documents?employeeId=${employee}`),
       ]);
       setRecord(results[0]); setPersonal(results[1]); setEmergency(results[2]); setSensitive(results[3]);
       setSkills(results[4]); setCatalogue(results[5]); setPlans(results[6]); setCycles(results[7]); setLetters(results[8]);
-      setDepartments(results[9] || []);
+      setDepartments(results[9] || []); setDocuments(results[10]);
     } catch (error) {
       flash((error as Error).message);
     } finally {
@@ -100,6 +107,25 @@ export function EmployeeRecordDrawer({ person, people, onClose, onChanged, onDel
     const checks = [employee.department_id, employee.reporting_manager_id, employee.grade, employee.work_email, employee.probation_end_date || employee.confirmation_date, personal?.completion?.personalDetails || personal?.personalDetails, emergency?.contacts?.length, sensitive?.bankDetails, sensitive?.statutoryDetails];
     return Math.round(checks.filter(Boolean).length / checks.length * 100);
   }, [employee, personal, emergency, sensitive]);
+
+  async function uploadDocument(file: File | undefined) {
+    if (!file) return;
+    if (!docCategory) { if (docInput.current) docInput.current.value = ""; return flash("Choose what kind of document this is first."); }
+    setDocBusy(true);
+    try {
+      const body = new FormData(); body.set("file", file); body.set("category", docCategory); body.set("expiresOn", docExpiry);
+      await requiredData(await fetch(`/api/employees/${encodeURIComponent(person.id)}/documents`, { method: "POST", body }));
+      setDocCategory(""); setDocExpiry(""); setRefresh(value => value + 1); flash("Document uploaded.");
+    } catch (error) { flash((error as Error).message); }
+    finally { setDocBusy(false); if (docInput.current) docInput.current.value = ""; }
+  }
+
+  async function openDocument(doc: any) {
+    try {
+      const result = await requiredData(await fetch(`/api/documents/${doc.id}/download`));
+      window.open(result.url, "_blank", "noopener,noreferrer");
+    } catch (error) { flash((error as Error).message); }
+  }
 
   async function changePhoto(file: File | undefined, remove = false) {
     if (!remove && !file) return;
@@ -151,7 +177,7 @@ export function EmployeeRecordDrawer({ person, people, onClose, onChanged, onDel
         <div className="record-summary"><div><span>Record complete</span><strong>{completion}%</strong></div><i><b style={{ width: `${completion}%` }} /></i><em className={`status ${String(employee?.status || "active").replaceAll("_", "-")}`}>{friendly(employee?.status || "active")}</em></div>
       </header>
       <nav className="record-tabs" aria-label="Employee record sections">
-        {(["employment", "personal", "pay", "growth", "letters", "timeline"] as Tab[]).map(item => <button key={item} className={tab === item ? "active" : ""} onClick={() => setTab(item)}>{item === "pay" ? "Pay, PF & bank" : item === "growth" ? "Growth & skills" : item === "timeline" ? "History" : friendly(item)}</button>)}
+        {(["employment", "personal", "pay", "growth", "letters", "documents", "timeline"] as Tab[]).map(item => <button key={item} className={tab === item ? "active" : ""} onClick={() => setTab(item)}>{item === "pay" ? "Pay, PF & bank" : item === "growth" ? "Growth & skills" : item === "timeline" ? "History" : friendly(item)}</button>)}
       </nav>
       <div className="record-body">
         {busy ? <div className="record-loading">Loading the secured employee record…</div> : !employee ? <div className="record-loading">This record is not available in your authorised scope.</div> : <>
@@ -194,6 +220,12 @@ export function EmployeeRecordDrawer({ person, people, onClose, onChanged, onDel
           </div>}
           {tab === "letters" && <RecordCard title="Employee letters" subtitle="Snapshot-based, independently approved and privately generated" action={letters ? "Request letter" : undefined} onAction={() => setForm("letter")}>
             {letters ? <div className="record-list letters">{letters.map(letter => <button key={letter.id} onClick={() => downloadLetter(letter)}><span>▤</span><div><strong>{friendly(letter.letter_type)}</strong><small>Effective {dateOnly(letter.effective_date)} · template {letter.template_version} · requested by {letter.requested_by_name}</small></div><em className={`status ${String(letter.status).replaceAll("_", "-")}`}>{letter.document_id ? "Download" : friendly(letter.generation_status || letter.status)}</em></button>)}{!letters.length && <Unavailable text="No employee letters have been requested." />}</div> : <Unavailable text="Letters are not available for this role." />}
+          </RecordCard>}
+          {tab === "documents" && <RecordCard title="Documents" subtitle="Private files. Each one is virus-checked before it can be opened.">
+            {documents ? <>
+              <div className="doc-upload"><select value={docCategory} onChange={event => setDocCategory(event.target.value)} aria-label="Document type"><option value="">What kind of document?</option>{DOCUMENT_CATEGORIES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select><label>Expires on (optional)<input type="date" value={docExpiry} onChange={event => setDocExpiry(event.target.value)} /></label><input ref={docInput} type="file" hidden accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp" onChange={event => uploadDocument(event.target.files?.[0])} /><button type="button" disabled={docBusy} onClick={() => docInput.current?.click()}>{docBusy ? "Uploading…" : "Choose file and upload"}</button></div>
+              {documents.length ? <div className="record-list">{documents.map((doc: any) => <button key={doc.id} onClick={() => openDocument(doc)}><span>▤</span><div><strong>{doc.file_name}</strong><small>{friendly(doc.category)} · {(Number(doc.size_bytes) / 1024 / 1024).toFixed(1)} MB · added {String(doc.created_at).slice(0, 10)}{doc.expires_on ? ` · expires ${String(doc.expires_on).slice(0, 10)}` : ""}</small></div><em className={`status ${doc.scan_status === "clean" ? "approved" : doc.scan_status === "infected" ? "rejected" : "pending"}`}>{doc.scan_status === "clean" ? "Checked" : doc.scan_status === "infected" ? "Blocked" : "Awaiting check"}</em></button>)}</div> : <div className="record-empty">No documents yet.</div>}
+            </> : <div className="record-empty">You do not have access to this employee's documents.</div>}
           </RecordCard>}
           {tab === "timeline" && <RecordCard title="Employment timeline" subtitle="Dated employee events cannot be silently overwritten"><div className="timeline-list">{(record.events || []).map((event: any) => <div key={event.id}><i /><span>{dateOnly(event.effective_date)}</span><div><strong>{friendly(event.event_type)}</strong><p>{event.reason}</p><small>Recorded by {event.created_by_name} · {new Date(event.created_at).toLocaleString("en-IN")}</small></div></div>)}{!record.events?.length && <Unavailable text="No employee events have been recorded yet." />}</div></RecordCard>}
         </>}
