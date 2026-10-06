@@ -33,12 +33,13 @@ async function optionalData(path: string) {
   return requiredData(response);
 }
 
-export function EmployeeRecordDrawer({ person, people, onClose, onChanged, onDeleted, onPhotoChanged, flash }: {
+export function EmployeeRecordDrawer({ person, people, onClose, onChanged, onDeleted, onRestored, onPhotoChanged, flash }: {
   person: DirectoryPerson;
   people: DirectoryPerson[];
   onClose: () => void;
   onChanged: () => void;
   onDeleted: () => void;
+  onRestored?: () => void;
   onPhotoChanged?: () => void;
   flash: (message: string) => void;
 }) {
@@ -127,6 +128,15 @@ export function EmployeeRecordDrawer({ person, people, onClose, onChanged, onDel
     } catch (error) { flash((error as Error).message); }
   }
 
+  async function restoreEmployee() {
+    const reason = window.prompt("Reason for restoring this employee to People:", "Employee was removed by mistake");
+    if (!reason) return;
+    try {
+      await requiredData(await fetch(`/api/employees/${encodeURIComponent(person.id)}/restore`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ reason }) }));
+      flash("Employee restored to People."); onRestored?.();
+    } catch (error) { flash((error as Error).message); }
+  }
+
   async function changePhoto(file: File | undefined, remove = false) {
     if (!remove && !file) return;
     setPhotoBusy(true);
@@ -189,7 +199,7 @@ export function EmployeeRecordDrawer({ person, people, onClose, onChanged, onDel
               ["Date joined", dateOnly(employee.date_joined)], ["Probation end", dateOnly(employee.probation_end_date)], ["Confirmation", dateOnly(employee.confirmation_date)], ["Next salary revision", dateOnly(employee.next_salary_revision_date)], ["Notice started", dateOnly(employee.notice_start_date)], ["Last working day", dateOnly(employee.last_working_date)],
             ]} /></RecordCard>
             <RecordCard title="Work contact"><DefinitionGrid values={[["Work email", employee.work_email], ["Work phone", employee.phone], ["Record created", dateOnly(employee.created_at)], ["Last updated", dateOnly(employee.updated_at)]]} /></RecordCard>
-            <RecordCard title="Remove from People" subtitle="Hides the employee from active directories while preserving payroll, attendance and audit history" action="Delete employee" danger onAction={() => setForm("delete")}><Unavailable text="Use this only when an employee record should no longer appear in People. This action is audited." /></RecordCard>
+            {employee.status === "archived" ? <RecordCard title="Restore to People" subtitle="This employee was removed from People. Restoring brings them back to the staff list with their earlier status." action="Restore employee" onAction={restoreEmployee}><Unavailable text="Payroll, attendance and audit history were kept. Anyone who reported to this person will need a new reporting manager. This action is audited." /></RecordCard> : <RecordCard title="Remove from People" subtitle="Hides the employee from active directories while preserving payroll, attendance and audit history" action="Delete employee" danger onAction={() => setForm("delete")}><Unavailable text="Use this only when an employee record should no longer appear in People. This action is audited." /></RecordCard>}
           </div>}
           {tab === "personal" && <div className="record-grid">
             <RecordCard title="Personal details" action={personal ? "Edit details" : undefined} onAction={() => setForm("personal")}>
