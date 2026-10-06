@@ -194,12 +194,6 @@ export default function Home() {
           const badge=(item:Module)=>item==='Helpdesk'?counts.openHelpdesk:item==='Leave & Shifts'?counts.pendingLeave:null;
           const button=(item:Module)=>{const count=badge(item);return <button className={active === item ? "active" : ""} onClick={() => {setActive(item);if(item==='People')setPeopleFilter('all');setShowMobileNav(false)}} key={item}><Icon name={ICON[item]} />{LABEL[item]}{count?<b title={`${count} waiting`}>{count}</b>:null}</button>};
           if(employeeOnly) return <div className="nav-group">{button('My Workspace')}</div>;
-          useEffect(()=>{
-    if(filter!=='archived'){return}
-    setRemovedError(false);
-    const params=new URLSearchParams({archived:'1'});if(businessHeadId&&businessHeadId!=='all')params.set('businessHeadId',businessHeadId);
-    fetch(`/api/employees?${params}`).then(response=>response.ok?response.json():Promise.reject()).then(body=>setRemoved(body.data.map((row:any,index:number)=>({id:row.id,name:[row.first_name,row.last_name].filter(Boolean).join(" ").replace(/\s+/g," ").trim(),code:row.employee_code,role:row.position,dept:row.department||"—",head:row.business_head,businessHeadId:row.business_head_id,departmentId:row.department_id||null,joined:new Intl.DateTimeFormat("en-IN",{day:"2-digit",month:"short",year:"numeric"}).format(new Date(row.date_joined)),joinedIso:String(row.date_joined).slice(0,10),status:"Archived",initials:`${row.first_name?.trim()?.[0]||""}${row.last_name?.trim()?.[0]||""}`.toUpperCase(),color:(['lilac','mint','blue','peach','yellow'])[index%5],probationEnd:null,photoV:row.photo_updated_at?String(row.photo_updated_at):null})))).catch(()=>{setRemoved([]);setRemovedError(true)});
-  },[filter,businessHeadId]);
   const visible=(section:typeof nav[number])=>section.items.filter(item=>item!=='Administration'||canAdmin);
           const moreOpen=showMore||nav.some(section=>section.more&&section.items.includes(active));
           return <>{nav.filter(section=>!section.more).map(section=><div className="nav-group" key="main">{visible(section).map(button)}</div>)}
@@ -355,6 +349,12 @@ function PeopleView({ people,heads,businessHeadId,head,flash,initialFilter='all'
     archived:()=>true,
   };
   const tabs:[Exclude<PeopleFilter,'add'>,string][]=[['all','Everyone'],['new','Joined in last 90 days'],['probation','On probation'],['overdue','Probation overdue'],['department','Needs a department'],['dates','Check joining date'],['notice','Leaving (notice period)'],['archived','Removed staff']];
+          useEffect(()=>{
+    if(filter!=='archived'){return}
+    setRemovedError(false);
+    const params=new URLSearchParams({archived:'1'});if(businessHeadId&&businessHeadId!=='all')params.set('businessHeadId',businessHeadId);
+    fetch(`/api/employees?${params}`).then(response=>response.ok?response.json():Promise.reject()).then(body=>setRemoved(body.data.map((row:any,index:number)=>({id:row.id,name:[row.first_name,row.last_name].filter(Boolean).join(" ").replace(/\s+/g," ").trim(),code:row.employee_code,role:row.position,dept:row.department||"—",head:row.business_head,businessHeadId:row.business_head_id,departmentId:row.department_id||null,joined:new Intl.DateTimeFormat("en-IN",{day:"2-digit",month:"short",year:"numeric"}).format(new Date(row.date_joined)),joinedIso:String(row.date_joined).slice(0,10),status:"Archived",initials:`${row.first_name?.trim()?.[0]||""}${row.last_name?.trim()?.[0]||""}`.toUpperCase(),color:(['lilac','mint','blue','peach','yellow'])[index%5],probationEnd:null,photoV:row.photo_updated_at?String(row.photo_updated_at):null})))).catch(()=>{setRemoved([]);setRemovedError(true)});
+  },[filter,businessHeadId]);
   const visible=(filter==='archived'?removed||[]:people).filter(test[filter]).sort((a,b)=>filter==='overdue'?probationDue(a).getTime()-probationDue(b).getTime():0);
   return <><PageHead eyebrow="Staff" title="All staff" text={`${head} · Click a name to see or change that person's full record.`} action="Add staff" onAction={() => setAdding(true)} />
     <div className="metrics compact"><Metric label="TOTAL STAFF" value={String(people.length)} note={head} icon="◎" tone="purple" /><Metric label="CONFIRMED" value={String(active)} note="Probation completed" icon="✓" tone="green" /><Metric label="ON PROBATION" value={String(probation)} note={`${people.filter(isOverdue).length} past their probation date`} icon="◷" tone="orange" /><Metric label="SERVING NOTICE" value={String(notice)} note="Leaving the company" icon="↙" tone="blue" /></div>
