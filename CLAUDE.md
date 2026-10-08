@@ -326,3 +326,17 @@ can no longer be pulled from Docker Hub ("pull access denied"). The pull error a
 anything restarts (app stays up). Use the redeploy option that rebuilds without pulling. Proper fix, when
 next touching the compose file: switch MinIO to a maintained image (or pin a locally tagged copy of the
 current image) so a pull can never break deploys.
+
+---
+
+## 12. Diwali gift register — Super Admin only (Oct 2026)
+
+- Menu: **More → Diwali gifts**, shown only to an unrestricted `SUPER_ADMIN` (no company/department limit). Every route under
+  `app/api/diwali-gifts/` starts with `requireSuperAdmin()` (`lib/diwali-gifts.ts`); anyone else gets **404**, API keys included.
+  The rule itself is `isUnrestrictedSuperAdmin` in `lib/diwali-gift-rules.ts` (unit tested).
+- Table `diwali_gifts` (migration 023): only `gift_year` and `status` are readable. Recipient, item, quantity, values, vendor, bill no.,
+  notes etc. are sealed JSON in `details_encrypted` (AES-256-GCM, `DATA_ENCRYPTION_KEY`).
+  **If `DATA_ENCRYPTION_KEY` is lost or rotated the gift records cannot be read again — keep a separate copy of it.**
+- Changes are logged in `diwali_gift_events`, deliberately **not** in `audit_events` (which HR admins and auditors can read).
+- Removing a gift is a soft delete (`deleted_at`). Not built yet: "add all staff" in one click, tax-limit warnings
+  (employee gifts in kind ≈ ₹5,000/yr, 194R ≈ ₹20,000/yr for business contacts — confirm with the CA).
