@@ -22,7 +22,7 @@ export async function GET(request: Request) {
     const [actor] = broad ? [] : await sql<{ id: string }[]>`SELECT id FROM employees WHERE user_id=${user.id}`;
     const rows = await sql`
       SELECT e.id AS employee_id,e.employee_code,concat_ws(' ',e.first_name,e.last_name) AS employee_name,d.name AS department,
-        c.missing_days,c.coming_days,c.marked_days,c.missing_dates,c.present_days,c.half_days,c.absent_days,c.paid_leave_days,c.unpaid_leave_days,c.off_days,c.overtime_minutes
+        c.missing_days,c.coming_days,c.marked_days,c.missing_dates,c.present_days,c.half_days,c.absent_days,c.paid_leave_days,c.unpaid_leave_days,c.off_days,c.overtime_minutes,c.late_days,c.late_minutes,c.early_days,c.early_minutes
       FROM employees e
       LEFT JOIN departments d ON d.id=e.department_id
       CROSS JOIN LATERAL (
@@ -42,7 +42,11 @@ export async function GET(request: Request) {
           count(*) FILTER (WHERE a.status='paid_leave')::int AS paid_leave_days,
           count(*) FILTER (WHERE a.status='unpaid_leave')::int AS unpaid_leave_days,
           count(*) FILTER (WHERE a.status IN ('weekly_off','holiday'))::int AS off_days,
-          coalesce(sum(a.overtime_minutes),0)::int AS overtime_minutes
+          coalesce(sum(a.overtime_minutes),0)::int AS overtime_minutes,
+          count(*) FILTER (WHERE a.late_minutes>0)::int AS late_days,
+          coalesce(sum(a.late_minutes),0)::int AS late_minutes,
+          count(*) FILTER (WHERE a.early_minutes>0)::int AS early_days,
+          coalesce(sum(a.early_minutes),0)::int AS early_minutes
         FROM (SELECT (b.first_day+n)::date AS day FROM generate_series(0,b.last_day-b.first_day) n) g
         LEFT JOIN attendance_days a ON a.employee_id=e.id AND a.attendance_date=g.day
       ) c
