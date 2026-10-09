@@ -10,7 +10,7 @@ test("attendance can be marked in bulk without overwriting, and per person with 
   assert.match(bulk, /ON CONFLICT \(employee_id,attendance_date\) DO NOTHING/);
   assert.match(bulk, /NOT EXISTS \(SELECT 1 FROM attendance_days/);
   assert.match(bulk, /hasPermissionForScope\(user, "attendance:write"/);
-  assert.match(bulk, /m\.status IS NULL OR m\.status='open'/);
+  assert.match(bulk, /row\.month_status === null \|\| row\.month_status === "open"/);
   assert.match(bulk, /locked_at IS NOT NULL/);
   assert.match(bulk, /attendance\.bulk_mark/);
   assert.match(bulk, /status=.approved./);

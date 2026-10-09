@@ -29,14 +29,16 @@ export async function POST(request: Request) {
     if (user instanceof Response) return user;
     const sql = db();
     const [existing] = await sql<{id:string;status:string;reviewed_by:string|null;reviewed_at:string|null;employee_count:number;exception_count:number;summary:{employees?:AttendanceMonthSummaryRow[]}}[]>`SELECT id,status,reviewed_by,reviewed_at,employee_count,exception_count,summary FROM attendance_months WHERE business_head_id=${input.businessHeadId} AND period_month=${input.periodMonth}`;
-    if (input.action === "reopen" && !user.roles.some(role => role.code === "SUPER_ADMIN" || role.code === "HR_ADMIN")) return fail("Only HR administrators can reopen a locked month", 403);
+    if (input.action === "reopen" && !user.roles.some(role => role.code === "SUPER_ADMIN" || role.code === "HR_ADMIN")) return fail("Only HR administrators can reopen a month", 403);
     if (input.action === "reopen") {
-      if (!existing || existing.status !== "locked") return fail("Only a locked month can be reopened", 409);
+      if (!existing || !["review", "locked"].includes(existing.status)) return fail("Only a month that is under review or locked can be reopened", 409);
+      const wasLocked = existing.status === "locked";
       const [finalPayroll]=await sql`SELECT id,status FROM payroll_periods WHERE business_head_id=${input.businessHeadId} AND period_month=${input.periodMonth} AND status IN ('locked','paid') LIMIT 1`;
       if(finalPayroll)return fail('Attendance consumed by locked or paid payroll cannot be reopened; use a post-lock adjustment',409,{payrollPeriodId:finalPayroll.id,payrollStatus:finalPayroll.status});
       const [row] = await sql.begin(async tx => {
         const rows = await tx`UPDATE attendance_months SET status='open',reviewed_at=NULL,reviewed_by=NULL,locked_at=NULL,locked_by=NULL,reopened_at=now(),reopened_by=${user.id},reopen_reason=${input.reason},updated_at=now() WHERE id=${existing.id} RETURNING *`;
-        await tx`UPDATE attendance_days a SET locked_at=NULL,locked_by=NULL FROM employees e WHERE e.id=a.employee_id AND e.business_head_id=${input.businessHeadId} AND a.attendance_date>=${input.periodMonth}::date AND a.attendance_date<${input.periodMonth}::date+interval '1 month'`;
+        // Only a locked month had its days locked by the month lock; a month under review has no such locks to clear.
+        if (wasLocked) await tx`UPDATE attendance_days a SET locked_at=NULL,locked_by=NULL FROM employees e WHERE e.id=a.employee_id AND e.business_head_id=${input.businessHeadId} AND a.attendance_date>=${input.periodMonth}::date AND a.attendance_date<${input.periodMonth}::date+interval '1 month'`;
         await tx`INSERT INTO audit_events (actor_user_id,action,entity_type,entity_id,business_head_id,before_data,after_data,reason) VALUES (${user.id},'attendance_month.reopen','attendance_month',${existing.id},${input.businessHeadId},${JSON.stringify(existing)}::jsonb,${JSON.stringify(rows[0])}::jsonb,${input.reason})`;
         return rows;
       });
