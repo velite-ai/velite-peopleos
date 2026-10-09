@@ -9,7 +9,7 @@ const schema = z.object({
   employeeIds: z.array(z.uuid()).min(1).max(1000),
 });
 
-type Candidate = { id: string; business_head_id: string; department_id: string | null; leave_paid: boolean | null; half_day_leave: boolean };
+type Candidate = { id: string; business_head_id: string; department_id: string | null; company: string; month_status: string | null; leave_paid: boolean | null; half_day_leave: boolean };
 
 // Marks the staff who have no attendance yet for the day. It never overwrites a record that already exists.
 // A "present" run puts anyone with an approved full-day leave on that date on leave instead, and leaves
@@ -21,7 +21,7 @@ export async function POST(request: Request) {
     if (user instanceof Response) return user;
     const sql = db();
     const candidates = await sql<Candidate[]>`
-      SELECT e.id,e.business_head_id,e.department_id,
+      SELECT e.id,e.business_head_id,e.department_id,b.name AS company,m.status AS month_status,
         (SELECT lr.paid FROM leave_requests lr
           WHERE lr.employee_id=e.id AND lr.status='approved'
             AND lr.derived_work_dates @> to_jsonb(${input.date}::text)
@@ -33,19 +33,27 @@ export async function POST(request: Request) {
             AND lr.derived_work_dates @> to_jsonb(${input.date}::text)
             AND ((${input.date}::date=lr.start_date AND lr.start_day_fraction<1) OR (${input.date}::date=lr.end_date AND lr.end_day_fraction<1))) AS half_day_leave
       FROM employees e
+      JOIN business_heads b ON b.id=e.business_head_id
       LEFT JOIN attendance_months m ON m.business_head_id=e.business_head_id AND m.period_month=date_trunc('month',${input.date}::date)::date
       WHERE e.id=ANY(${input.employeeIds}::uuid[])
         AND e.status NOT IN ('candidate','preboarding','archived')
         AND e.date_joined<=${input.date}::date
         AND (e.last_working_date IS NULL OR e.last_working_date>=${input.date}::date)
-        AND (m.status IS NULL OR m.status='open')
         AND NOT EXISTS (SELECT 1 FROM attendance_days a WHERE a.employee_id=e.id AND a.attendance_date=${input.date}::date)
     `;
     const permitted = candidates.filter(row => hasPermissionForScope(user, "attendance:write", row.business_head_id, row.department_id));
     if (candidates.length && !permitted.length) return fail("You do not have permission to mark attendance for these staff", 403);
-    const halfDay = input.status === "present" ? permitted.filter(row => row.half_day_leave).length : 0;
-    const allowed = input.status === "present" ? permitted.filter(row => !row.half_day_leave) : permitted;
-    if (!allowed.length) return ok({ marked: 0, onLeave: 0, halfDayLeft: halfDay });
+    // A month that is under review or locked cannot be edited. Say which companies were skipped, and why.
+    const blockedRows = permitted.filter(row => row.month_status !== null && row.month_status !== "open");
+    const blocked = [...blockedRows.reduce((groups, row) => {
+      const key = `${row.company}|${row.month_status}`;
+      groups.set(key, { company: row.company, status: row.month_status as string, count: (groups.get(key)?.count || 0) + 1 });
+      return groups;
+    }, new Map<string, { company: string; status: string; count: number }>()).values()];
+    const editable = permitted.filter(row => row.month_status === null || row.month_status === "open");
+    const halfDay = input.status === "present" ? editable.filter(row => row.half_day_leave).length : 0;
+    const allowed = input.status === "present" ? editable.filter(row => !row.half_day_leave) : editable;
+    if (!allowed.length) return ok({ marked: 0, onLeave: 0, halfDayLeft: halfDay, blocked });
     const heads = [...new Set(allowed.map(row => row.business_head_id))];
     const [locked] = await sql`SELECT 1 FROM attendance_days a JOIN employees e ON e.id=a.employee_id WHERE a.attendance_date=${input.date}::date AND a.locked_at IS NOT NULL AND e.business_head_id=ANY(${heads}::uuid[]) LIMIT 1`;
     if (locked) return fail("This day is locked", 409);
@@ -64,6 +72,6 @@ export async function POST(request: Request) {
       }
       return inserted;
     });
-    return ok({ marked: result.length, onLeave: result.filter(row => row.status !== input.status).length, halfDayLeft: halfDay });
+    return ok({ marked: result.length, onLeave: result.filter(row => row.status !== input.status).length, halfDayLeft: halfDay, blocked });
   } catch (error) { return apiError(error); }
 }
