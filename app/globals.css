@@ -177,3 +177,6 @@ html,body{font-family:"Segoe UI",system-ui,-apple-system,Roboto,"Helvetica Neue"
 
 /* Attendance: five summary cards */
 .metrics.five{grid-template-columns:repeat(5,1fr)}@media(max-width:1200px){.metrics.five{grid-template-columns:repeat(3,1fr)}}@media(max-width:700px){.metrics.five{grid-template-columns:1fr 1fr}}
+
+/* Change company / unlock */
+.company-preview{background:#f6f7f5;border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;font-size:15px}.company-preview p{margin:0}.company-warning{color:#8a5a12}.att-unlock{border:0;background:transparent;color:#226647;font-weight:700;cursor:pointer;font-size:15px}.att-unlock span{color:#6b7a72;font-weight:400}
