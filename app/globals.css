@@ -174,3 +174,6 @@ html,body{font-family:"Segoe UI",system-ui,-apple-system,Roboto,"Helvetica Neue"
 
 /* Late and early times */
 .att-timebtn{height:34px;border:1px dashed #9aa79f;background:#fff;border-radius:8px;padding:0 10px;font-size:14px;color:#38443e;cursor:pointer}.att-timebtn:hover{background:#f2f5f2}.att-time{font-style:normal;font-size:14px;color:#38443e;margin-left:4px}.att-time .late,.time-calc .late{color:#b4443b;font-weight:700}.time-calc .ok{color:#277353;font-weight:700}.time-modal{width:min(520px,96vw)}.time-calc{display:flex;flex-direction:column;gap:6px;font-size:15px;background:#f6f7f5;border-radius:10px;padding:12px 14px}.time-modal input[type=time]{height:46px;font-size:18px}
+
+/* Attendance: five summary cards */
+.metrics.five{grid-template-columns:repeat(5,1fr)}@media(max-width:1200px){.metrics.five{grid-template-columns:repeat(3,1fr)}}@media(max-width:700px){.metrics.five{grid-template-columns:1fr 1fr}}
