@@ -92,8 +92,10 @@ type CalendarDisplay={id:string;eventDate:string;day:string;month:string;title:s
 type GlobalSearchItem={id:string;kind:string;title:string;subtitle:string;status:string|null;module:Module;businessHeadId:string|null};
 type GlobalSearchGroup={key:string;label:string;items:GlobalSearchItem[]};
 
+/* Today's date in India as YYYY-MM-DD. (The UTC date is still yesterday in India until about 05:30.) */
+const istToday = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
 const money = (n: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n);
-async function downloadExport(report:'workforce'|'attendance'|'payroll'|'performance'|'recruitment',businessHeadId:string,reason:string){const response=await fetch('/api/reports/export',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({report,businessHeadId:businessHeadId==='all'?null:businessHeadId,reason})});if(!response.ok)throw new Error((await response.json().catch(()=>null))?.error?.message||'Export failed');const blob=await response.blob();const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download=`velite-${report}-${new Date().toISOString().slice(0,10)}.csv`;link.click();URL.revokeObjectURL(url);}
+async function downloadExport(report:'workforce'|'attendance'|'payroll'|'performance'|'recruitment',businessHeadId:string,reason:string){const response=await fetch('/api/reports/export',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({report,businessHeadId:businessHeadId==='all'?null:businessHeadId,reason})});if(!response.ok)throw new Error((await response.json().catch(()=>null))?.error?.message||'Export failed');const blob=await response.blob();const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download=`velite-${report}-${istToday()}.csv`;link.click();URL.revokeObjectURL(url);}
 
 export default function Home() {
   const [active, setActive] = useState<Module>("Overview");
@@ -139,7 +141,7 @@ export default function Home() {
     if (!sessionUser || employeeOnly) return;
     const departmentScope=sessionUser.roles.find(role=>role.departmentId&&role.businessHeadId===head)?.departmentId||null;
     const scope = head === "all" ? "" : `?businessHeadId=${encodeURIComponent(head)}${departmentScope?`&departmentId=${encodeURIComponent(departmentScope)}`:''}`;
-    const today = new Date().toISOString().slice(0,10);
+    const today = istToday();
     /* Each list loads on its own, so one slow or failing screen can never blank another. */
     const json=(url:string)=>fetch(url).then(response=>response.ok?response.json():Promise.reject(new Error(url)));
     Promise.allSettled([
@@ -377,8 +379,13 @@ function toAttendanceRow(row:any):AttendanceRow{
 }
 
 function AttendanceView({ rows:initialRows,people,businessHeadId,head,flash }: { rows:AttendanceRow[];people:Person[];businessHeadId:string;head:string;flash:(s:string)=>void }) {
-  const [day, setDay] = useState(new Date().toISOString().slice(0,10));
-  const [rows,setRows]=useState(initialRows);
+  const [day, setDay] = useState(istToday());
+  /* The rows on screen belong to one day and one company (loadedKey). If either changes, show nothing until the right rows arrive. */
+  const [rowsState,setRows]=useState(initialRows);
+  const [loadedKey,setLoadedKey]=useState(`${istToday()}|${businessHeadId}`);
+  const viewKey=`${day}|${businessHeadId}`;
+  const loading=loadedKey!==viewKey;
+  const rows=loading?[]:rowsState;
   const[marking,setMarking]=useState(false);
   const[markFor,setMarkFor]=useState('');
   const[refresh,setRefresh]=useState(0);
@@ -389,8 +396,7 @@ function AttendanceView({ rows:initialRows,people,businessHeadId,head,flash }: {
   const[bulkBusy,setBulkBusy]=useState(false);
   const[monthOpen,setMonthOpen]=useState(false);
   const[timeFor,setTimeFor]=useState<AttendanceRow|null>(null);
-  useEffect(()=>{setRows(initialRows)},[initialRows]);
-  useEffect(()=>{const scope=businessHeadId==='all'?'':`&businessHeadId=${encodeURIComponent(businessHeadId)}`;fetch(`/api/attendance?date=${day}${scope}`).then(r=>r.ok?r.json():Promise.reject()).then(body=>setRows(body.data.map(toAttendanceRow))).catch(()=>flash('Attendance could not be loaded for that date.'))},[day,businessHeadId,refresh]);
+  useEffect(()=>{let current=true;const scope=businessHeadId==='all'?'':`&businessHeadId=${encodeURIComponent(businessHeadId)}`;fetch(`/api/attendance?date=${day}${scope}`).then(r=>r.ok?r.json():Promise.reject()).then(body=>{if(current){setRows(body.data.map(toAttendanceRow));setLoadedKey(`${day}|${businessHeadId}`)}}).catch(()=>{if(current)flash('Attendance could not be loaded for that date.')});return()=>{current=false}},[day,businessHeadId,refresh]);
   useEffect(()=>{if(businessHeadId==='all'){setMonthSummary(null);return;}fetch(`/api/attendance/months?businessHeadId=${encodeURIComponent(businessHeadId)}&periodMonth=${day.slice(0,7)}-01`).then(response=>response.ok?response.json():({data:[]})).then(body=>setMonthSummary(body.data?.[0]||null))},[businessHeadId,day,refresh]);
   const present=rows.filter(row=>["Present","Work From Home","On Duty","Half Day"].includes(row.status)).length;const absent=rows.filter(row=>row.status==="Absent").length;const leave=rows.filter(row=>row.status.includes("Leave")).length;const notMarked=rows.filter(row=>rawStatus(row)==="missing").length;
   const departments=[...new Set(rows.map(row=>row.dept).filter(Boolean))].sort() as string[];
@@ -429,7 +435,7 @@ function AttendanceView({ rows:initialRows,people,businessHeadId,head,flash }: {
         <div className="att-actions"><button className="primary" disabled={bulkBusy||!notMarked} onClick={()=>markEveryone('present')}>{bulkBusy?'Saving…':'✓ Mark everyone Present'}</button><button className="secondary" disabled={bulkBusy||!notMarked} onClick={()=>markEveryone('weekly_off')}>Weekly off for all</button><button className="secondary" disabled={bulkBusy||!notMarked} onClick={()=>markEveryone('holiday')}>Holiday for all</button></div>
         <div className="att-filters"><input type="search" placeholder="Find a name or code" value={search} onChange={e=>setSearch(e.target.value)} aria-label="Find staff"/>{departments.length>1&&<select value={dept} onChange={e=>setDept(e.target.value)} aria-label="Department"><option value="">All departments</option>{departments.map(name=><option key={name} value={name}>{name}</option>)}</select>}<button className={`secondary ${onlyUnmarked?'on':''}`} onClick={()=>setOnlyUnmarked(value=>!value)}>{onlyUnmarked?'Showing not marked only':`Show only not marked (${notMarked})`}</button></div></div>
       <div className="data-table att-sheet"><div className="tr th"><span>NAME</span><span>TAP THE RIGHT STATUS</span><span></span></div>{visible.map(a => {const raw=rawStatus(a);return <div className="tr" key={a.id}><span><b>{nice(a.name)}<small>{a.sub}{a.dept?` · ${a.dept}`:''}</small></b></span><span className="att-buttons">{raw==='not_employed'?<em className="status">Not employed on this day</em>:ATT_BUTTONS.map(([label,statuses,target])=><button key={label} className={`att-btn ${label.toLowerCase().replace(' ','-')} ${statuses.includes(raw)?'on':''}`} disabled={a.locked} aria-pressed={statuses.includes(raw)} onClick={()=>tap(a,target)}>{label}</button>)}{raw==='missing'&&<em className="att-hint">Not marked</em>}{(isTimeStatus(raw)||raw==='missing')&&!a.locked&&<button type="button" className="att-timebtn" onClick={()=>setTimeFor(a)} title="Record the time this person came and left">⏱ {a.inClock||a.outClock?'Edit time':'Time'}</button>}{(a.inClock||a.outClock)&&<em className="att-time">{a.inClock||'—'} → {a.outClock||'—'}{a.late?<b className="late"> · Late {a.late} min</b>:null}{a.early?<b className="late"> · Left early {a.early} min</b>:null}</em>}{['unpaid_leave','weekly_off','holiday','work_from_home','on_duty'].includes(raw)&&<em className="att-hint">{a.status}</em>}</span><span><button className="link" disabled={a.locked} title="Hours, overtime, unpaid leave, work from home or a note" onClick={() => {if(a.locked){flash('This day is locked.');return;}setMarkFor(a.employeeId||'');setMarking(true)}}>{a.locked?'Locked':'Details'}</button></span></div>})}</div>
-      {!visible.length&&<div className="empty-state padded">No staff match this search.</div>}
+      {loading?<div className="empty-state padded">Loading attendance for {day}…</div>:!visible.length&&<div className="empty-state padded">No staff match this search.</div>}
       <div className="table-foot"><span>{visible.length} of {rows.length} staff shown · {rows.filter(row=>(row.late||0)>0).length} came late · {rows.filter(row=>(row.early||0)>0).length} left early</span></div>
     </section>{timeFor&&<TimeEntryModal row={timeFor} date={day} onClose={()=>setTimeFor(null)} onSaved={()=>{setTimeFor(null);setRefresh(value=>value+1);flash('Time saved.')}}/>}{monthOpen&&<MonthSummaryModal businessHeadId={businessHeadId} head={head} initialMonth={day.slice(0,7)} onClose={()=>setMonthOpen(false)} onPick={(date,code)=>{setDay(date);setSearch(code);setOnlyUnmarked(false);setDept('');setMonthOpen(false)}}/>}{marking&&<AttendanceForm people={people} rows={rows} date={day} defaultEmployee={markFor} onClose={()=>setMarking(false)} onSaved={()=>{setMarking(false);setRefresh(value=>value+1);flash('Attendance saved.')}}/>}</>;
 }
