@@ -4,6 +4,7 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { EmployeePhoto } from "@/components/employee-photo";
+import { countLabel } from "@/lib/company-correction-rules";
 
 type DirectoryPerson = {
   id: string;
@@ -33,9 +34,12 @@ async function optionalData(path: string) {
   return requiredData(response);
 }
 
-export function EmployeeRecordDrawer({ person, people, onClose, onChanged, onDeleted, onRestored, onPhotoChanged, flash }: {
+export function EmployeeRecordDrawer({ person, people, heads = [], canChangeCompany = false, onClose, onChanged, onDeleted, onRestored, onMoved, onPhotoChanged, flash }: {
   person: DirectoryPerson;
   people: DirectoryPerson[];
+  heads?: { id: string; name: string }[];
+  canChangeCompany?: boolean;
+  onMoved?: () => void;
   onClose: () => void;
   onChanged: () => void;
   onDeleted: () => void;
@@ -63,6 +67,7 @@ export function EmployeeRecordDrawer({ person, people, onClose, onChanged, onDel
   const [docExpiry, setDocExpiry] = useState("");
   const docInput = useRef<HTMLInputElement>(null);
   const [photoBusy, setPhotoBusy] = useState(false);
+  const [companyOpen, setCompanyOpen] = useState(false);
   const photoInput = useRef<HTMLInputElement>(null);
   const photoChanged = useRef(false);
   const closeRecord = useCallback(() => { onClose(); if (photoChanged.current) onPhotoChanged?.(); }, [onClose, onPhotoChanged]);
@@ -199,6 +204,7 @@ export function EmployeeRecordDrawer({ person, people, onClose, onChanged, onDel
               ["Date joined", dateOnly(employee.date_joined)], ["Probation end", dateOnly(employee.probation_end_date)], ["Confirmation", dateOnly(employee.confirmation_date)], ["Next salary revision", dateOnly(employee.next_salary_revision_date)], ["Notice started", dateOnly(employee.notice_start_date)], ["Last working day", dateOnly(employee.last_working_date)],
             ]} /></RecordCard>
             <RecordCard title="Work contact"><DefinitionGrid values={[["Work email", employee.work_email], ["Work phone", employee.phone], ["Record created", dateOnly(employee.created_at)], ["Last updated", dateOnly(employee.updated_at)]]} /></RecordCard>
+            {canChangeCompany && employee.status !== "archived" && <RecordCard title="Company" subtitle={`Currently ${employee.business_head}`} action="Change company" onAction={() => setCompanyOpen(true)}><Unavailable text="Use this only to correct a company entered by mistake. Attendance and other personal records move with the person." /></RecordCard>}
             {employee.status === "archived" ? <RecordCard title="Restore to People" subtitle="This employee was removed from People. Restoring brings them back to the staff list with their earlier status." action="Restore employee" onAction={restoreEmployee}><Unavailable text="Payroll, attendance and audit history were kept. Anyone who reported to this person will need a new reporting manager. This action is audited." /></RecordCard> : <RecordCard title="Remove from People" subtitle="Hides the employee from active directories while preserving payroll, attendance and audit history" action="Delete employee" danger onAction={() => setForm("delete")}><Unavailable text="Use this only when an employee record should no longer appear in People. This action is audited." /></RecordCard>}
           </div>}
           {tab === "personal" && <div className="record-grid">
@@ -241,8 +247,51 @@ export function EmployeeRecordDrawer({ person, people, onClose, onChanged, onDel
         </>}
       </div>
     </section>
+    {companyOpen && employee && <ChangeCompanyModal employeeId={person.id} name={[employee.first_name, employee.last_name].filter(Boolean).join(" ")} current={employee.business_head} currentId={employee.business_head_id} heads={heads} onClose={() => setCompanyOpen(false)} onMoved={() => { setCompanyOpen(false); flash("Company corrected."); onMoved?.(); }} />}
     {form && employee && <EmployeeRecordForm kind={form} employee={employee} personal={personal} sensitive={sensitive} catalogue={catalogue || []} cycles={cycles || []} people={people} departments={departments} onClose={() => setForm(null)} onSaved={() => { const removed=form === "delete"; setForm(null); if(removed){flash("Employee removed from People. Historical HR records were preserved.");onDeleted();return;} setRefresh(value => value + 1); onChanged(); flash("Saved."); }} />}
   </div>;
+}
+
+type MovePreview = { from: string; to: string; moves: { label: string; count: number }[]; blocked: string[]; warnings: string[]; canMove: boolean; cleared: { department: { was: string; now: string | null } | null; reportingManager: boolean; directReports: number; companyDetails: boolean } };
+
+function ChangeCompanyModal({ employeeId, name, current, currentId, heads, onClose, onMoved }: { employeeId: string; name: string; current: string; currentId: string; heads: { id: string; name: string }[]; onClose: () => void; onMoved: () => void }) {
+  const [target, setTarget] = useState("");
+  const [preview, setPreview] = useState<MovePreview | null>(null);
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const options = heads.filter(head => head.id !== currentId);
+  async function call(body: object) {
+    const response = await fetch(`/api/employees/${encodeURIComponent(employeeId)}/company`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    return requiredData(response);
+  }
+  async function choose(id: string) {
+    setTarget(id); setPreview(null); setError("");
+    if (!id) return;
+    try { setPreview(await call({ businessHeadId: id, reason: "Preview of a company correction", dryRun: true })); }
+    catch (problem) { setError((problem as Error).message); }
+  }
+  async function submit() {
+    setBusy(true); setError("");
+    try { await call({ businessHeadId: target, reason }); onMoved(); }
+    catch (problem) { setError((problem as Error).message); setBusy(false); }
+  }
+  return <div className="modal-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}><section className="modal" role="dialog" aria-modal="true" aria-labelledby="change-company-title">
+    <div className="modal-head"><div><span className="eyebrow">{name}</span><h2 id="change-company-title">Change company</h2></div><button onClick={onClose} aria-label="Close">×</button></div>
+    <div className="form-grid">
+      <p className="span-two">Currently in <b>{current}</b>. Use this only to correct a company that was entered by mistake. Their history moves with them, as if they had always been in the new company.</p>
+      <label className="span-two">Move to<select value={target} onChange={event => choose(event.target.value)}><option value="">Choose the correct company…</option>{options.map(head => <option key={head.id} value={head.id}>{head.name}</option>)}</select></label>
+      {preview && <div className="span-two company-preview">
+        {preview.moves.length ? <p><b>Moves with {name}:</b> {preview.moves.map(item => countLabel(item.count, item.label)).join(", ")}.</p> : <p><b>Moves with {name}:</b> nothing recorded yet.</p>}
+        <p><b>Set again after the move:</b> {[preview.cleared.department ? `department (${preview.cleared.department.was}${preview.cleared.department.now ? ` → ${preview.cleared.department.now}` : " → none, choose again"})` : null, preview.cleared.reportingManager ? "reporting manager" : null, preview.cleared.companyDetails ? "legal entity, work location, cost centre, job position" : null, preview.cleared.directReports ? `${preview.cleared.directReports} people who report to them will have no manager` : null].filter(Boolean).join("; ") || "nothing"}.</p>
+        {preview.warnings.map(item => <p key={item} className="company-warning">{item}</p>)}
+        {preview.blocked.length > 0 && <div className="form-error">This cannot be done automatically: {preview.blocked.join("; ")}.</div>}
+      </div>}
+      {preview?.canMove && <label className="span-two">Reason<input value={reason} onChange={event => setReason(event.target.value)} placeholder="For example Entered under the wrong company by mistake" /></label>}
+      {error && <div className="form-error span-two">{error}</div>}
+      <div className="modal-actions span-two"><button type="button" className="secondary" onClick={onClose}>Cancel</button><button className="primary" disabled={busy || !preview?.canMove || reason.trim().length < 5} onClick={submit}>{busy ? "Moving…" : `Move to ${options.find(head => head.id === target)?.name || "…"}`}</button></div>
+    </div>
+  </section></div>;
 }
 
 function RecordCard({ title, subtitle, action, danger, onAction, children }: { title: string; subtitle?: string; action?: string; danger?: boolean; onAction?: () => void; children: React.ReactNode }) {
