@@ -340,3 +340,35 @@ current image) so a pull can never break deploys.
 - Changes are logged in `diwali_gift_events`, deliberately **not** in `audit_events` (which HR admins and auditors can read).
 - Removing a gift is a soft delete (`deleted_at`). Not built yet: "add all staff" in one click, tax-limit warnings
   (employee gifts in kind ≈ ₹5,000/yr, 194R ≈ ₹20,000/yr for business contacts — confirm with the CA).
+
+---
+
+## 13. Salary calculation — Oct 2026
+
+Checked against the Aug 2026 salary registers of Healthcare and Pharmaceuticals (`tests/payroll-statutory.test.mjs` replays
+every row: ESI, PF, welfare fund and net pay all match, and so do the printed ESIC / EPF / LWF totals).
+
+**Method (unchanged from the registers):** monthly rate ÷ **days in the month** × days paid (weekly offs and holidays count as paid, half
+day = 0.5). The run now always divides by the days in the month; the old "salary divisor days" in the pay form is ignored (it defaulted to 30).
+
+**Statutory rules — Healthcare and Pharmaceuticals only** (`lib/payroll-standard-rules.ts`, Salary → Salary rules, pick ONE company in the left menu):
+1. "Add PF, ESI & welfare fund rules" (by the PAYROLL_ADMIN login) creates 7 rules for that company, effective from a date you enter.
+2. "Approve waiting PF/ESI rules" (by a different login with approve rights) approves them. Never create these as "Global".
+- PF: 12% of earned **basic** when monthly **basic** ≤ ₹25,000 (ceiling from 17 Sep 2026; was ₹15,000). Employer: 8.33% pension + balance to PF.
+- ESI: 0.75% of earned **basic**, rounded **up**, when monthly **gross** (basic + allowances) ≤ ₹21,000. Employer 3.25%.
+- Labour welfare fund: ₹5 employee + ₹20 employer for anyone who worked that month. Not applied to the other four companies.
+- Others 1, Others 2, Velite India, Velite Sciences keep the plain salary rules: no PF, ESI or welfare fund.
+- Not computed per person: PF admin charge (min ₹500) and EDLI, which the registers treat as one figure for the whole company.
+  Employer ESI is per person, so it can differ by a rupee or two from the challan total. Confirm rates and "wages" with the CA (new labour codes).
+- Not built yet: bonus and leave-with-wages for leavers, ESIC / EPF challan files, professional tax, TDS.
+
+**Approval (`lib/payroll-approval-mode.ts`):** default is "simple" — one login prepares (PAYROLL_ADMIN), a different login reviews
+(HR_ADMIN or Super Admin; the preparer can never review their own month), then the month is locked and paid. Set `PAYROLL_APPROVAL_MODE=strict`
+in Coolify to get the older prepare → HR review → finance approval → separate final lock once there are enough logins.
+
+**Bugs found and fixed by running a full salary month end to end (none of this had ever worked, `salary_months` was 0):**
+- JSON was saved as a text string inside jsonb columns (`${JSON.stringify(x)}::jsonb` is encoded twice by the postgres driver).
+  Monthly attendance lock recorded 0 staff, and salary rules/pay structures were unreadable. Fixed in `lib/database.ts` +
+  `lib/postgres-json.ts` (also the worker); migration `024_repair_json_stored_as_text.sql` unwraps existing rows (audit trail is
+  append-only so it is left; the reader unwraps it).
+- Calculating a salary month crashed (date returned as an object); overtime query used columns that don't exist.

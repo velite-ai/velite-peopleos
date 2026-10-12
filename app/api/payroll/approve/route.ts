@@ -2,6 +2,7 @@ import { z } from "zod";
 import { apiError, fail, ok, requireApiUser } from "@/lib/api";
 import { hasRoleForScope } from "@/lib/auth";
 import { db } from "@/lib/database";
+import { payrollApprovalMode } from "@/lib/payroll-approval-mode";
 
 const schema=z.object({payrollPeriodId:z.uuid(),decision:z.enum(['approve','return']),reason:z.string().min(3).max(1000)});
 
@@ -25,13 +26,15 @@ export async function POST(request:Request){
       }
       if(period.calculated_by===user.id)return null;
       const reviewer=approvals.find(step=>step.stage==='reviewer');const finance=approvals.find(step=>step.stage==='finance');
-      const stage=reviewer?'finance':'reviewer';
+      const simple=payrollApprovalMode()==='simple';
+      if(simple&&reviewer)return{status:'approved',stage:'reviewer',decision:'approve',alreadyApproved:true};
+      const stage=reviewer&&!simple?'finance':'reviewer';
       if(stage==='reviewer'&&!hasRoleForScope(user,['HR_ADMIN'],period.business_head_id))throw new Error('REVIEWER_ROLE_REQUIRED');
       if(stage==='finance'&&!hasRoleForScope(user,['FINANCE_APPROVER'],period.business_head_id))throw new Error('FINANCE_ROLE_REQUIRED');
       if(finance)return{status:'approved',stage:'finance',decision:'approve',alreadyApproved:true};
       if(reviewer?.actor_user_id===user.id)return null;
       await tx`INSERT INTO payroll_approval_steps (payroll_period_id,stage,decision,actor_user_id,reason) VALUES (${input.payrollPeriodId},${stage},'approve',${user.id},${input.reason})`;
-      const next=stage==='finance'?'approved':'review';
+      const next=stage==='finance'||simple?'approved':'review';
       await tx`UPDATE payroll_periods SET status=${next} WHERE id=${input.payrollPeriodId}`;
       await tx`INSERT INTO audit_events (actor_user_id,action,entity_type,entity_id,business_head_id,reason,after_data) VALUES (${user.id},${`payroll.${stage}_approve`},'payroll_period',${input.payrollPeriodId},${period.business_head_id},${input.reason},${JSON.stringify({stage,status:next})}::jsonb)`;
       return{status:next,stage,decision:'approve'};
