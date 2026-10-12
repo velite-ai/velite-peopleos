@@ -14,6 +14,25 @@ const sql = postgres(databaseUrl, {
   max: positiveInteger("WORKER_DB_POOL_SIZE", 5),
   idle_timeout: 20,
   connect_timeout: 10,
+  // Same JSON handling as lib/postgres-json.ts: text that is already JSON is stored as it is (not encoded twice).
+  types: {
+    json: {
+      to: 114,
+      from: [114, 3802],
+      serialize: value => (typeof value === "string" ? value : JSON.stringify(value)),
+      parse: text => {
+        let value = JSON.parse(text);
+        for (let layer = 0; layer < 3 && typeof value === "string"; layer++) {
+          const inner = value.trim();
+          if (!/^[\[{"]/.test(inner)) break;
+          let next;
+          try { next = JSON.parse(inner); } catch { break; }
+          if (typeof next === "string" || (typeof next === "object" && next !== null)) value = next; else break;
+        }
+        return value;
+      },
+    },
+  },
 });
 const workerId = randomUUID();
 const workerName = process.env.WORKER_NAME || hostname();

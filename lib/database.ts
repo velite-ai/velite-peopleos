@@ -1,4 +1,5 @@
 import postgres from "postgres";
+import { jsonTypes } from "./postgres-json";
 
 const globalForDb = globalThis as unknown as { veliteSql?: ReturnType<typeof postgres> };
 
@@ -12,6 +13,7 @@ export function db() {
       connect_timeout: 10,
       prepare: true,
       transform: { undefined: null },
+      types: jsonTypes,
     });
   }
   return globalForDb.veliteSql;
