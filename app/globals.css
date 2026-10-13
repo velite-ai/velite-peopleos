@@ -180,3 +180,11 @@ html,body{font-family:"Segoe UI",system-ui,-apple-system,Roboto,"Helvetica Neue"
 
 /* Change company / unlock */
 .company-preview{background:#f6f7f5;border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;font-size:15px}.company-preview p{margin:0}.company-warning{color:#8a5a12}.att-unlock{border:0;background:transparent;color:#226647;font-weight:700;cursor:pointer;font-size:15px}.att-unlock span{color:#6b7a72;font-weight:400}
+
+/* Click a staff photo to see it large */
+.photo-lightbox{position:fixed;inset:0;z-index:2000;background:#0b120ee6;display:grid;place-items:center;padding:20px;cursor:zoom-out}
+.photo-lightbox figure{margin:0;display:grid;gap:12px;justify-items:center;cursor:default;max-width:100%}
+.photo-lightbox img{display:block;max-width:min(92vw,900px);max-height:78vh;width:auto;height:auto;object-fit:contain;border-radius:12px;background:#fff;box-shadow:0 20px 60px #0008}
+.photo-lightbox figcaption{display:flex;align-items:center;gap:16px;color:#fff;font-size:18px;font-weight:700}
+.photo-lightbox figcaption button{border:1px solid #ffffff66;background:#ffffff1f;color:#fff;border-radius:8px;padding:8px 16px;font-size:16px;font-weight:700;cursor:pointer}
+.photo-lightbox figcaption button:hover,.photo-lightbox figcaption button:focus-visible{background:#ffffff40}
