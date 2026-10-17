@@ -372,3 +372,29 @@ in Coolify to get the older prepare → HR review → finance approval → separ
   `lib/postgres-json.ts` (also the worker); migration `024_repair_json_stored_as_text.sql` unwraps existing rows (audit trail is
   append-only so it is left; the reader unwraps it).
 - Calculating a salary month crashed (date returned as an object); overtime query used columns that don't exist.
+
+---
+
+## 14. Printable letters with preview and PDF download — Oct 2026
+
+Staff record → **Letters** tab → **Print a letter**: eight letters in three groups — Joining (Offer, Appointment), During service (Confirmation,
+Salary revision, Employment verification), Leaving (Acceptance of resignation, Relieving, Experience). Clicking one opens
+`/letters/print?type=…&employee=…` in a new tab with a **preview** of the letter (A4, blank space at the top for the company's pre-printed
+letterhead — adjustable, remembered). Nothing prints until **Print** is pressed. **Download PDF** saves a file to share; it has no letterhead,
+so it carries the company name at the top (tick box in the toolbar).
+
+- Wording and logic: `lib/letter-rules.ts` (`buildLetter`, unit tested). The offer letter follows the company's sample (`Offer_letter_45.pdf`:
+  reference, address, probation, salary, checklist page, "Accepted & Agreed By"); the other letters are drafts in the same style — HR should
+  read them once (the experience and relieving letters state satisfactory conduct / completed exit formalities).
+- PDF file: `lib/letter-pdf.ts`, a small dependency-free writer (A4, Helvetica, justified text) that runs in the browser from the same content as
+  the preview. Glyph widths are the real Helvetica widths. Characters outside Windows-1252 print as "?" (names in other scripts).
+- Data: `app/api/employees/[id]/print-letter` (HR only, `people:write`): name, title from gender (Mr./Ms. or none), address and gender from the
+  encrypted personal details, mobile, position, department, joining date, probation months (from probation end, else 6), pay (only if the login has
+  `payroll:read`, else blank with a warning; offer/appointment = pay at joining, salary revision = latest pay and its start date), confirmation date
+  (else probation end date), resignation date / last working day / notice from the open or completed exit.
+- Acceptance, relieving and experience letters need the last working day: use **Record resignation** first (Lifecycle dates card, Employment tab).
+- Reference number `VH/2026-27/05/13/1` = company initials / financial year / month / day / serial of the company's letters that day.
+  Table `printed_letters` (migration 025) keeps one row per person, letter type and day, so printing again the same day reuses the number.
+  Every opening of a letter is in `audit_events` (`employee_letter.print`).
+- The older approval-based letters ("Request letter" on the same tab, worker-made PDF) are unchanged.
+- Not built: offer letter printed from Hiring (candidate offers), company letterhead image in the downloaded PDF, saving a copy in Documents.
