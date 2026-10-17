@@ -188,3 +188,10 @@ html,body{font-family:"Segoe UI",system-ui,-apple-system,Roboto,"Helvetica Neue"
 .photo-lightbox figcaption{display:flex;align-items:center;gap:16px;color:#fff;font-size:18px;font-weight:700}
 .photo-lightbox figcaption button{border:1px solid #ffffff66;background:#ffffff1f;color:#fff;border-radius:8px;padding:8px 16px;font-size:16px;font-weight:700;cursor:pointer}
 .photo-lightbox figcaption button:hover,.photo-lightbox figcaption button:focus-visible{background:#ffffff40}
+
+/* Lifecycle card: exit in progress / record resignation */
+.exit-note{margin:14px 21px 18px;padding:12px 14px;border:1px solid #e3d9b8;background:#fbf6e6;border-radius:10px;display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;font-size:14px;color:#4a4330}
+.exit-note b{display:block;font-size:15px;color:#2f2a1c;margin-bottom:3px}
+.exit-note span{display:block;flex:1 1 220px;line-height:1.4}
+.exit-note button{border:1px solid #c9b77a;background:#fff;color:#4a4330;border-radius:8px;padding:8px 14px;font-size:14px;font-weight:700;cursor:pointer}
+.exit-note button:hover{background:#f6edcf}
