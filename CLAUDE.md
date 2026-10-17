@@ -372,3 +372,23 @@ in Coolify to get the older prepare → HR review → finance approval → separ
   `lib/postgres-json.ts` (also the worker); migration `024_repair_json_stored_as_text.sql` unwraps existing rows (audit trail is
   append-only so it is left; the reader unwraps it).
 - Calculating a salary month crashed (date returned as an object); overtime query used columns that don't exist.
+
+---
+
+## 14. One-click printable letters — Oct 2026
+
+Staff record → **Letters** tab → **Print a letter**: Offer letter, Acceptance of resignation, Experience letter. One click opens
+`/letters/print?type=…&employee=…` in a new tab (A4, blank space at the top for the company's pre-printed letterhead — adjustable, remembered)
+and opens the browser's Print dialog by itself. If a detail is missing it shows a warning and waits for the Print button instead.
+
+- Wording and the whole logic live in `lib/letter-rules.ts` (`buildLetter`, unit tested). Offer letter follows the company's sample
+  (`Offer_letter_45.pdf`: reference, address, probation, salary, checklist page and "Accepted & Agreed By"). The other two are drafts in the same style.
+- Data (`app/api/employees/[id]/print-letter`, HR only, `people:write`): name, title from gender (Mr./Ms. or none), address and gender from the
+  encrypted personal details, mobile, position, department, joining date, probation months (from probation end, else 6), monthly gross salary
+  (only if the login has `payroll:read`, else left blank with a warning), resignation date / last working day / notice from the open or completed exit.
+- Acceptance and experience letters need a last working day: use **Record resignation** first (Lifecycle dates card on the Employment tab).
+- Reference number `VH/2026-27/05/13/1` = company initials / financial year / month / day / serial of the company's letters that day.
+  Table `printed_letters` (migration 025) keeps one row per person, letter type and day, so printing again the same day reuses the number.
+  Every print is in `audit_events` (`employee_letter.print`).
+- The older approval-based letters (Request letter on the same tab, worker-made PDF) are unchanged.
+- Not built: offer letter printed from Hiring (candidate offers), saving a copy of the printed letter in Documents.

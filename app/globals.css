@@ -195,3 +195,40 @@ html,body{font-family:"Segoe UI",system-ui,-apple-system,Roboto,"Helvetica Neue"
 .exit-note span{display:block;flex:1 1 220px;line-height:1.4}
 .exit-note button{border:1px solid #c9b77a;background:#fff;color:#4a4330;border-radius:8px;padding:8px 14px;font-size:14px;font-weight:700;cursor:pointer}
 .exit-note button:hover{background:#f6edcf}
+
+/* Printable letters (staff record > Letters). Printed on the company letterhead, so the top is left blank. */
+.print-letters{display:flex;gap:10px;flex-wrap:wrap;padding:6px 21px 4px}
+.print-letters button{border:1px solid #246b4d;background:#246b4d;color:#fff;border-radius:9px;padding:11px 16px;font-size:15px;font-weight:700;cursor:pointer}
+.print-letters button:hover{background:#1d5a40}
+.print-letters-note{margin:8px 21px 18px;font-size:14px;color:#4d5a53}
+.letter-page{background:#e9ece9;min-height:100vh;padding:12px;color:#000}
+.letter-toolbar{max-width:210mm;margin:0 auto 12px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;background:#fff;border:1px solid #d6dcd7;border-radius:10px;padding:10px 14px;font:15px Arial,sans-serif}
+.letter-toolbar label{display:flex;gap:8px;align-items:center;color:#4d5a53}
+.letter-toolbar input{width:70px;height:32px;border:1px solid #cbd2cc;border-radius:6px;padding:0 6px}
+.letter-toolbar button{height:34px;border:1px solid #cbd2cc;background:#fff;border-radius:8px;padding:0 16px;font-size:15px;font-weight:700;cursor:pointer}
+.letter-toolbar button.primary{background:#246b4d;border-color:#246b4d;color:#fff}
+.letter-warning,.letter-error{flex:1 1 100%;margin:0;color:#8a5a00;background:#fff6dc;border:1px solid #ecd48a;border-radius:8px;padding:8px 10px;font-size:14px}
+.letter-error{color:#8a1f1f;background:#fdecec;border-color:#efb4b4}
+.letter-sheet{--letter-top:4.5cm;background:#fff;width:210mm;min-height:297mm;margin:0 auto 14px;padding:var(--letter-top) 22mm 20mm;box-sizing:border-box;font:11pt/1.55 Arial,Helvetica,sans-serif;color:#000;box-shadow:0 2px 14px #0002}
+.letter-sheet p{margin:0 0 10pt}
+.letter-ref{display:flex;justify-content:space-between;gap:16px;margin-bottom:14pt}
+.letter-body{text-align:justify}
+.letter-heading{text-align:center;font-weight:700;text-decoration:underline;margin:6pt 0 12pt!important}
+.letter-subject{text-align:center;font-weight:700;text-decoration:underline;margin:12pt 0!important}
+.letter-for{margin-top:14pt!important;margin-bottom:34pt!important}
+.letter-sign{margin-bottom:14pt!important}
+.letter-checklist-title{font-weight:700;text-decoration:underline}
+.letter-checklist{border-collapse:collapse;width:78%;margin:6pt 0 28pt}
+.letter-checklist th,.letter-checklist td{border:1px solid #000;padding:12pt 10pt;text-align:left}
+.letter-checklist th:first-child,.letter-checklist td:first-child{width:14%}
+.letter-note{margin-bottom:2pt!important}
+.letter-accept{display:flex;justify-content:space-between}
+.letter-accept-by{display:flex;flex-direction:column;align-items:center;gap:48pt}
+@media print{
+  @page{size:A4;margin:0}
+  html,body{background:#fff!important}
+  .no-print{display:none!important}
+  .letter-page{background:#fff;padding:0;min-height:0}
+  .letter-sheet{box-shadow:none;margin:0;width:210mm}
+  .letter-second{break-before:page}
+}

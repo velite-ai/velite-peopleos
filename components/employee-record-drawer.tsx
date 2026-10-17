@@ -238,6 +238,12 @@ export function EmployeeRecordDrawer({ person, people, heads = [], canChangeComp
               {plans ? <div className="record-list plans">{plans.map(plan => <button key={plan.id} onClick={() => decidePlan(plan)}><span>☆</span><div><strong>{plan.title}</strong><small>{plan.actions?.length || 0} action(s) · due {dateOnly(plan.due_date)} · {plan.owner_name || "Owner pending"}</small></div><em className={`status ${String(plan.status).replaceAll("_", "-")}`}>{friendly(plan.status)}</em></button>)}{!plans.length && <Unavailable text="No development plans have been created." />}</div> : <Unavailable text="Development plans require performance access." />}
             </RecordCard>
           </div>}
+          {tab === "letters" && <RecordCard title="Print a letter" subtitle="One click opens the letter ready to print on the company letterhead. Details come from this record.">
+            <div className="print-letters">
+              {([["offer", "Offer letter"], ["acceptance", "Acceptance of resignation"], ["experience", "Experience letter"]] as const).map(([type, label]) => <button type="button" key={type} onClick={() => window.open(`/letters/print?type=${type}&employee=${encodeURIComponent(person.id)}`, "_blank")}>🖨 {label}</button>)}
+            </div>
+            <p className="print-letters-note">Acceptance and experience letters need the last working day: use <b>Record resignation</b> on the Employment tab first.</p>
+          </RecordCard>}
           {tab === "letters" && <RecordCard title="Employee letters" subtitle="Snapshot-based, independently approved and privately generated" action={letters ? "Request letter" : undefined} onAction={() => setForm("letter")}>
             {letters ? <div className="record-list letters">{letters.map(letter => <button key={letter.id} onClick={() => downloadLetter(letter)}><span>▤</span><div><strong>{friendly(letter.letter_type)}</strong><small>Effective {dateOnly(letter.effective_date)} · template {letter.template_version} · requested by {letter.requested_by_name}</small></div><em className={`status ${String(letter.status).replaceAll("_", "-")}`}>{letter.document_id ? "Download" : friendly(letter.generation_status || letter.status)}</em></button>)}{!letters.length && <Unavailable text="No employee letters have been requested." />}</div> : <Unavailable text="Letters are not available for this role." />}
           </RecordCard>}
