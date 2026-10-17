@@ -18,6 +18,8 @@ const schema = z.object({
   probationEndDate: z.iso.date().nullable().optional(),
   confirmationDate: z.iso.date().nullable().optional(),
   nextSalaryRevisionDate: z.iso.date().nullable().optional(),
+  noticeStartDate: z.iso.date().nullable().optional(),
+  lastWorkingDate: z.iso.date().nullable().optional(),
   effectiveDate: z.iso.date(),
   reason: z.string().min(3).max(2000),
 });
@@ -36,14 +38,16 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     const user = await requireApiUser("people:read", record.business_head_id, record.department_id);
     if (user instanceof Response) return user;
     const canViewCompensation = hasPermissionForScope(user, "payroll:read", record.business_head_id, record.department_id);
+    const canSeeExit = hasPermissionForScope(user, "separation:read", record.business_head_id, record.department_id);
     const [employee, events, compensation, salaryRegisterLines] = await Promise.all([
       sql`SELECT e.id,e.employee_code,e.user_id,e.business_head_id,e.department_id,e.reporting_manager_id,e.first_name,e.last_name,e.guardian_name,e.source_metadata,e.work_email,e.phone,e.position,e.grade,e.work_location,e.employment_type,e.status,e.date_joined,e.probation_end_date,e.confirmation_date,e.next_salary_revision_date,e.notice_start_date,e.last_working_date,e.photo_updated_at,e.legal_entity_id,e.work_location_id,e.cost_centre_id,e.job_position_id,e.created_at,e.updated_at,b.name AS business_head,d.name AS department,concat_ws(' ',m.first_name,m.last_name) AS reporting_manager FROM employees e JOIN business_heads b ON b.id=e.business_head_id LEFT JOIN departments d ON d.id=e.department_id LEFT JOIN employees m ON m.id=e.reporting_manager_id WHERE e.id=${id}`,
       sql`SELECT ev.id,ev.event_type,ev.effective_date,ev.previous_values,ev.new_values,ev.reason,ev.approved_by,ev.created_by,ev.created_at,u.full_name AS created_by_name FROM employee_events ev JOIN users u ON u.id=ev.created_by WHERE ev.employee_id=${id} ORDER BY ev.effective_date DESC,ev.created_at DESC`,
       canViewCompensation ? sql`SELECT id,effective_from,effective_to,annual_ctc,monthly_gross,structure,reason,created_at FROM employee_compensation WHERE employee_id=${id} ORDER BY effective_from DESC` : Promise.resolve([]),
       canViewCompensation ? sql`SELECT l.id,i.period_month,i.source_file_name,l.register_type,l.attendance_days,l.monthly_rates,l.earned_dues,l.deductions,l.total_dues,l.total_deductions,l.net_payable FROM salary_register_lines l JOIN salary_register_imports i ON i.id=l.import_id WHERE l.employee_id=${id} ORDER BY i.period_month DESC` : Promise.resolve([]),
     ]);
+    const [separation] = canSeeExit ? await sql`SELECT id,separation_type,status,submitted_date::text AS submitted_date,proposed_last_working_date::text AS proposed_last_working_date,approved_last_working_date::text AS approved_last_working_date,notice_days FROM separations WHERE employee_id=${id} AND status IN ('pending','approved') ORDER BY created_at DESC LIMIT 1` : [];
     if (canViewCompensation) await sql`INSERT INTO audit_events (actor_user_id,action,entity_type,entity_id,business_head_id,reason) VALUES (${user.id},'employee.compensation_view','employee',${id},${record.business_head_id},'Authorised compensation and salary-register history viewed')`;
-    return ok({ employee: employee[0], events, compensation, salaryRegisterLines, fieldAccess: { compensation: canViewCompensation } });
+    return ok({ employee: employee[0], events, compensation, salaryRegisterLines, separation: separation || null, fieldAccess: { compensation: canViewCompensation } });
   } catch (error) { return apiError(error); }
 }
 
@@ -57,6 +61,15 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const user = await requireApiUser("people:write", record.business_head_id, record.department_id);
     if (user instanceof Response) return user;
     if (input.reportingManagerId === id) return fail("An employee cannot report to themselves", 422);
+    const [dates] = await sql<{ date_joined: string; notice_start_date: string | null; last_working_date: string | null }[]>`SELECT date_joined::text AS date_joined,notice_start_date::text AS notice_start_date,last_working_date::text AS last_working_date FROM employees WHERE id=${id}`;
+    const joined = input.dateJoined ?? dates.date_joined;
+    const noticeStart = input.noticeStartDate !== undefined ? input.noticeStartDate : dates.notice_start_date;
+    const lastWorking = input.lastWorkingDate !== undefined ? input.lastWorkingDate : dates.last_working_date;
+    if (lastWorking && lastWorking < joined) return fail("The last working day cannot be before the date joined", 422);
+    if (lastWorking && noticeStart && lastWorking < noticeStart) return fail("The last working day cannot be before the day notice started", 422);
+    const [openExit] = await sql<{ id: string; submitted_date: string }[]>`SELECT id,submitted_date::text AS submitted_date FROM separations WHERE employee_id=${id} AND status IN ('pending','approved') LIMIT 1`;
+    if (openExit && input.lastWorkingDate === null) return fail("This person has an exit in progress. Change the last working day instead of clearing it.", 422);
+    if (openExit && input.lastWorkingDate && input.lastWorkingDate < openExit.submitted_date) return fail("The last working day cannot be before the day the resignation was submitted", 422);
     if (input.departmentId) {
       const [department] = await sql`SELECT id FROM departments WHERE id=${input.departmentId} AND business_head_id=${record.business_head_id}`;
       if (!department) return fail("Department does not belong to the employee business head", 422);
@@ -81,9 +94,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           probation_end_date=CASE WHEN ${input.probationEndDate !== undefined} THEN ${input.probationEndDate ?? null}::date ELSE probation_end_date END,
           confirmation_date=CASE WHEN ${input.confirmationDate !== undefined} THEN ${input.confirmationDate ?? null}::date ELSE confirmation_date END,
           next_salary_revision_date=CASE WHEN ${input.nextSalaryRevisionDate !== undefined} THEN ${input.nextSalaryRevisionDate ?? null}::date ELSE next_salary_revision_date END,
+          notice_start_date=CASE WHEN ${input.noticeStartDate !== undefined} THEN ${input.noticeStartDate ?? null}::date ELSE notice_start_date END,
+          last_working_date=CASE WHEN ${input.lastWorkingDate !== undefined} THEN ${input.lastWorkingDate ?? null}::date ELSE last_working_date END,
           updated_at=now()
         WHERE id=${id} RETURNING *
       `;
+      // Keep an open exit (Leaving screen) on the same last working day as the record.
+      if (openExit && input.lastWorkingDate) await tx`UPDATE separations SET proposed_last_working_date=${input.lastWorkingDate}::date,approved_last_working_date=CASE WHEN approved_last_working_date IS NOT NULL THEN ${input.lastWorkingDate}::date ELSE NULL END WHERE id=${openExit.id}`;
       await tx`INSERT INTO employee_events (employee_id,event_type,effective_date,previous_values,new_values,reason,approved_by,created_by) VALUES (${id},'profile_change',${input.effectiveDate},${JSON.stringify(record)}::jsonb,${JSON.stringify(rows[0])}::jsonb,${input.reason},${user.id},${user.id})`;
       await tx`INSERT INTO audit_events (actor_user_id,action,entity_type,entity_id,business_head_id,before_data,after_data,reason) VALUES (${user.id},'employee.update','employee',${id},${record.business_head_id},${JSON.stringify(record)}::jsonb,${JSON.stringify(rows[0])}::jsonb,${input.reason})`;
       return rows;
