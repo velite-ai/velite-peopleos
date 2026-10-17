@@ -4,9 +4,20 @@
  * The letters are printed on the company's own letterhead, so nothing here draws a letterhead - only blank space at the top.
  */
 
-export type LetterType = "offer" | "acceptance" | "experience";
-export const LETTER_TYPES: LetterType[] = ["offer", "acceptance", "experience"];
-export const LETTER_LABELS: Record<LetterType, string> = { offer: "Offer letter", acceptance: "Acceptance of resignation", experience: "Experience letter" };
+export type LetterType = "offer" | "appointment" | "confirmation" | "salary_revision" | "employment_verification" | "acceptance" | "relieving" | "experience";
+export const LETTER_TYPES: LetterType[] = ["offer", "appointment", "confirmation", "salary_revision", "employment_verification", "acceptance", "relieving", "experience"];
+export const LETTER_LABELS: Record<LetterType, string> = {
+  offer: "Offer letter", appointment: "Appointment letter", confirmation: "Confirmation letter", salary_revision: "Salary revision letter",
+  employment_verification: "Employment verification letter", acceptance: "Acceptance of resignation", relieving: "Relieving letter", experience: "Experience letter",
+};
+// How the letters are grouped on the Letters tab.
+export const LETTER_GROUPS: { title: string; types: LetterType[] }[] = [
+  { title: "Joining", types: ["offer", "appointment"] },
+  { title: "During service", types: ["confirmation", "salary_revision", "employment_verification"] },
+  { title: "Leaving", types: ["acceptance", "relieving", "experience"] },
+];
+// These need the last working day (record the resignation first).
+export const NEEDS_LAST_WORKING_DAY: LetterType[] = ["acceptance", "relieving", "experience"];
 
 export type LetterData = {
   type: LetterType;
@@ -26,6 +37,9 @@ export type LetterData = {
   resignationDate: string | null;
   lastWorkingDay: string | null;
   noticeDays: number | null;
+  confirmationDate: string | null;
+  salaryEffectiveDate: string | null;
+  employmentEnded: boolean;
 };
 
 export type LetterContent = {
@@ -40,7 +54,8 @@ export type LetterContent = {
   signedFor: string;
   signatory: string;
   cc: string | null;
-  checklist: string[] | null;
+  checklist: string[] | null; // offer letter: second page with the document checklist and the acceptance block
+  acceptInline: boolean; // appointment letter: acceptance block under the signature
   warnings: string[];
 };
 
@@ -114,6 +129,7 @@ export function buildLetter(data: LetterData): LetterContent {
       closing: ["Yours faithfully,"],
       cc: "cc: Employee file",
       checklist: OFFER_CHECKLIST,
+      acceptInline: false,
       warnings,
     };
   }
@@ -137,7 +153,86 @@ export function buildLetter(data: LetterData): LetterContent {
       closing: ["Yours faithfully,"],
       cc: "cc: Employee file",
       checklist: null,
+      acceptInline: false,
       warnings,
+    };
+  }
+
+  const inDept = data.department ? ` in the ${data.department} department` : "";
+  const staffLines = [`${who},`, `${data.position}${data.department ? `, ${data.department}` : ""},`, `Employee Code: ${data.employeeCode}`];
+  const contact = [`${who},`, ...data.addressLines.map(line => `${line.replace(/,$/, "")},`), ...(data.mobile ? [`Mobile - ${data.mobile}`] : [])];
+  const joiningWarnings = () => {
+    if (data.addressLines.length === 0) warnings.push("No address is recorded for this person, so the address lines are blank. Add it under Personal, or write it in by hand.");
+    if (!data.mobile) warnings.push("No mobile number is recorded.");
+    if (data.monthlySalary === null) warnings.push("No salary is recorded (or you cannot see salaries), so the amount is blank. Fill it in by hand or add the pay record first.");
+  };
+  const money = data.monthlySalary === null ? BLANK : String(Math.round(data.monthlySalary));
+  const unchanged = "All other terms and conditions of your employment remain unchanged.";
+
+  if (data.type === "appointment") {
+    joiningWarnings();
+    return {
+      ...common, addressee: contact, salutation: `Dear ${who},`, heading: null, subject: "Appointment Letter",
+      paragraphs: [
+        `With reference to the offer letter issued to you, we are pleased to appoint you as ${data.position}${inDept} in our organisation with effect from ${longDate(data.joinedDate)}.`,
+        `You will be on probation for a period of ${data.probationMonths} months from the date of appointment. On satisfactory completion of the probation you will be confirmed in writing. The Management may, at its sole discretion, extend the period of probation to a maximum of One year.`,
+        `Your salary is fixed @ Rs. ${money}/- per month.`,
+        "Your services will be governed by the rules, policies and standing orders of the Company as amended from time to time. Please sign the duplicate copy of this letter as a token of your acceptance of the above terms.",
+      ],
+      closing: ["Yours faithfully,"], cc: "cc: Employee file", checklist: null, acceptInline: true, warnings,
+    };
+  }
+
+  if (data.type === "confirmation") {
+    if (!data.confirmationDate) warnings.push("No confirmation date or probation end date is recorded, so the date is blank. Add it with Edit dates on the Lifecycle card.");
+    return {
+      ...common, addressee: staffLines, salutation: `Dear ${who},`, heading: null, subject: "Confirmation of Services",
+      paragraphs: [
+        `We are pleased to inform you that, on completion of your probation period and on the basis of your satisfactory performance, you have been confirmed in the services of ${data.company} as ${data.position} with effect from ${longDate(data.confirmationDate)}.`,
+        unchanged,
+        "We congratulate you and wish you a successful career with us.",
+      ],
+      closing: ["Yours faithfully,"], cc: "cc: Employee file", checklist: null, acceptInline: false, warnings,
+    };
+  }
+
+  if (data.type === "salary_revision") {
+    if (data.monthlySalary === null) warnings.push("No salary is recorded (or you cannot see salaries), so the amount is blank. Add the pay record first.");
+    else if (data.salaryEffectiveDate && data.salaryEffectiveDate <= data.joinedDate) warnings.push("Only the salary from the joining date is recorded, so this is not a revision. Add the new pay under Pay, PF & bank first.");
+    return {
+      ...common, addressee: staffLines, salutation: `Dear ${who},`, heading: null, subject: "Revision of Salary",
+      paragraphs: [
+        `We are pleased to inform you that, in recognition of your performance and contribution, your salary has been revised to Rs. ${money}/- per month with effect from ${longDate(data.salaryEffectiveDate)}.`,
+        unchanged,
+        "We appreciate your contribution and look forward to your continued commitment.",
+      ],
+      closing: ["Yours faithfully,"], cc: "cc: Employee file", checklist: null, acceptInline: false, warnings,
+    };
+  }
+
+  if (data.type === "employment_verification") {
+    return {
+      ...common, addressee: [], salutation: null, heading: "TO WHOM IT MAY CONCERN", subject: "Employment Verification",
+      paragraphs: [
+        data.employmentEnded
+          ? `This is to certify that ${who} (Employee Code ${data.employeeCode}) was employed with ${data.company} as ${data.position}${inDept} from ${longDate(data.joinedDate)} to ${longDate(data.lastWorkingDay)}.`
+          : `This is to certify that ${who} (Employee Code ${data.employeeCode}) is employed with ${data.company} as ${data.position}${inDept} since ${longDate(data.joinedDate)}.`,
+        "This letter is issued at the request of the employee, for whatever purpose it may serve, without any liability on the part of the Company.",
+      ],
+      closing: ["Yours faithfully,"], cc: null, checklist: null, acceptInline: false, warnings,
+    };
+  }
+
+  if (data.type === "relieving") {
+    if (!data.lastWorkingDay) warnings.push("No last working day is recorded. Use Record resignation first.");
+    return {
+      ...common, addressee: staffLines, salutation: `Dear ${who},`, heading: null, subject: "Relieving Letter",
+      paragraphs: [
+        `This is with reference to your resignation${data.resignationDate ? ` dated ${longDate(data.resignationDate)}` : ""}. We confirm that you stand relieved from the services of ${data.company} with effect from the close of working hours on ${longDate(data.lastWorkingDay)}.`,
+        "You have handed over charge and completed the exit formalities as required. Your full and final settlement is being processed as per the Company's policy.",
+        "We thank you for your services and wish you all the best for your future endeavours.",
+      ],
+      closing: ["Yours faithfully,"], cc: "cc: Employee file", checklist: null, acceptInline: false, warnings,
     };
   }
 
@@ -156,6 +251,7 @@ export function buildLetter(data: LetterData): LetterContent {
     closing: ["Yours faithfully,"],
     cc: null,
     checklist: null,
+    acceptInline: false,
     warnings,
   };
 }

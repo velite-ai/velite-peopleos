@@ -4,18 +4,26 @@ import test from "node:test";
 
 const read = path => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("the Letters tab has one-click buttons that open the print page for this person", async () => {
+test("the Letters tab lists every letter by group and opens the preview for this person", async () => {
   const drawer = await read("components/employee-record-drawer.tsx");
   assert.match(drawer, /title="Print a letter"/);
-  for (const label of ["Offer letter", "Acceptance of resignation", "Experience letter"]) assert.match(drawer, new RegExp(label));
+  assert.match(drawer, /LETTER_GROUPS\.map/);
   assert.match(drawer, /window\.open\(`\/letters\/print\?type=\$\{type\}&employee=\$\{encodeURIComponent\(person\.id\)\}`, "_blank"\)/);
+  assert.match(drawer, /Record resignation/);
 });
 
-test("the print page leaves room for the company letterhead, opens Print itself, and hides its toolbar on paper", async () => {
+test("the letter page is a preview first: nothing prints on its own, and the PDF can be downloaded", async () => {
   const page = await read("app/letters/print/page.tsx");
-  assert.match(page, /window\.print\(\)/);
-  assert.match(page, /if \(!letter \|\| letter\.warnings\.length\) return/); // warnings are read before printing
-  assert.match(page, /velite_letter_top_cm/); // the space at the top is remembered
+  assert.doesNotMatch(page, /setTimeout\(\(\) => window\.print\(\)/); // no automatic printing any more
+  assert.match(page, /onClick=\{\(\) => window\.print\(\)\}>Print</);
+  assert.match(page, /onClick=\{download\}>Download PDF</);
+  assert.match(page, /buildLetterPdf\(letter/);
+  assert.match(page, /download = `\$\{name\}\.pdf`/);
+  assert.match(page, /velite_letter_top_cm/); // the letterhead space is remembered
+  assert.match(page, /Space for the company letterhead/);
+});
+
+test("the paper layout leaves room for the company letterhead and hides the toolbar when printing", async () => {
   const css = await read("app/globals.css");
   assert.match(css, /\.letter-sheet\{--letter-top:4\.5cm/);
   assert.match(css, /@page\{size:A4;margin:0\}/);
@@ -29,7 +37,9 @@ test("printing is for HR only, never draws salary for logins that cannot see it,
   assert.match(route, /hasPermissionForScope\(user, "payroll:read"/);
   assert.match(route, /INSERT INTO printed_letters/);
   assert.match(route, /employee_letter\.print/);
+  assert.match(route, /NEEDS_LAST_WORKING_DAY\.includes\(type\)/);
   const migration = await read("database/025_printed_letters.sql");
   assert.match(migration, /UNIQUE \(employee_id, letter_type, letter_date\)/);
   assert.match(migration, /UNIQUE \(business_head_id, letter_date, serial\)/);
+  for (const type of ["offer", "appointment", "confirmation", "salary_revision", "employment_verification", "acceptance", "relieving", "experience"]) assert.match(migration, new RegExp(`'${type}'`));
 });

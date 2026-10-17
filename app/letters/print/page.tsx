@@ -1,12 +1,15 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { buildLetter, LETTER_LABELS, LETTER_TYPES, type LetterData, type LetterType } from "@/lib/letter-rules";
+import { buildLetterPdf } from "@/lib/letter-pdf";
 
-// Opened by the Letters tab of a staff record. Shows the letter on a plain A4 page (blank space at the top for the letterhead) and opens Print.
+// Opened by the Letters tab of a staff record. Shows a preview of the letter on a plain A4 page (blank space at the top for the letterhead).
+// Nothing prints until Print is pressed; Download PDF saves a file that can be shared.
 export default function PrintLetterPage() {
   const [data, setData] = useState<LetterData | null>(null);
   const [error, setError] = useState("");
   const [top, setTop] = useState("4.5");
+  const [withCompany, setWithCompany] = useState(true);
   const started = useRef(false);
 
   useEffect(() => {
@@ -22,11 +25,14 @@ export default function PrintLetterPage() {
   }, []);
 
   const letter = data ? buildLetter(data) : null;
-  useEffect(() => {
-    if (!letter || letter.warnings.length) return; // with warnings, let the person read them before printing
-    const timer = window.setTimeout(() => window.print(), 600);
-    return () => window.clearTimeout(timer);
-  }, [letter]);
+  function download() {
+    if (!data || !letter) return;
+    const bytes = buildLetterPdf(letter, { company: withCompany ? data.company : undefined, title: `${LETTER_LABELS[data.type]} - ${data.name}` });
+    const blob = new Blob([bytes as BlobPart], { type: "application/pdf" });
+    const name = `${LETTER_LABELS[data.type]} - ${data.name} - ${data.reference}`.replace(/[\\/:*?"<>|]+/g, "-").replace(/\s+/g, " ");
+    const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = `${name}.pdf`;
+    document.body.appendChild(link); link.click(); link.remove(); window.setTimeout(() => URL.revokeObjectURL(link.href), 4000);
+  }
 
   function changeTop(value: string) { setTop(value); try { window.localStorage.setItem("velite_letter_top_cm", value); } catch { /* not saved */ } }
 
@@ -35,13 +41,17 @@ export default function PrintLetterPage() {
 
   return <div className="letter-page">
     <div className="letter-toolbar no-print">
-      <strong>{LETTER_LABELS[data.type]}</strong>
-      <label>Space at top for the letterhead (cm)<input type="number" min="0" max="12" step="0.5" value={top} onChange={event => changeTop(event.target.value)} /></label>
+      <strong>{LETTER_LABELS[data.type]} · preview</strong>
       <button type="button" className="primary" onClick={() => window.print()}>Print</button>
+      <button type="button" onClick={download}>Download PDF</button>
       <button type="button" onClick={() => window.close()}>Close</button>
+      <label>Space at top for the letterhead (cm)<input type="number" min="0" max="12" step="0.5" value={top} onChange={event => changeTop(event.target.value)} /></label>
+      <label className="letter-check"><input type="checkbox" checked={withCompany} onChange={event => setWithCompany(event.target.checked)} /> Put the company name at the top of the downloaded PDF</label>
+      <p className="letter-hint">Check the letter below. Nothing is printed until you press Print. Print is for your letterhead paper; the downloaded PDF has no letterhead, so it carries the company name instead.</p>
       {letter.warnings.map(warning => <p className="letter-warning" key={warning}>⚠ {warning}</p>)}
     </div>
     <article className="letter-sheet" style={{ "--letter-top": `${Number(top) || 0}cm` } as React.CSSProperties}>
+      <div className="letterhead-space no-print" aria-hidden="true">Space for the company letterhead</div>
       <div className="letter-ref"><span>Reference No. {letter.reference}</span><span>Date: {letter.dateText}</span></div>
       {letter.addressee.map(line => <p key={line}>{line}</p>)}
       {letter.heading && <p className="letter-heading">{letter.heading}</p>}
@@ -52,6 +62,7 @@ export default function PrintLetterPage() {
       <p className="letter-for"><b>{letter.signedFor}</b></p>
       <p className="letter-sign"><b>{letter.signatory}</b></p>
       {letter.cc && <p>{letter.cc}</p>}
+      {letter.acceptInline && <div className="letter-accept letter-accept-inline"><span>Dated:</span><span className="letter-accept-by"><span>Accepted &amp; Agreed By</span><span className="letter-accept-name">Employee Name</span></span></div>}
     </article>
     {letter.checklist && <article className="letter-sheet letter-second" style={{ "--letter-top": `${Number(top) || 0}cm` } as React.CSSProperties}>
       <p className="letter-checklist-title">Checklist of Mandatory Documents Required</p>

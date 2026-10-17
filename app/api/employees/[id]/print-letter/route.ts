@@ -3,7 +3,7 @@ import { apiError, fail, ok, requireApiUser } from "@/lib/api";
 import { hasPermissionForScope } from "@/lib/auth";
 import { db } from "@/lib/database";
 import { openJson } from "@/lib/encryption";
-import { LETTER_LABELS, LETTER_TYPES, type LetterData, probationMonths, referenceNumber, titleFor } from "@/lib/letter-rules";
+import { LETTER_LABELS, LETTER_TYPES, NEEDS_LAST_WORKING_DAY, type LetterData, probationMonths, referenceNumber, titleFor } from "@/lib/letter-rules";
 
 const schema = z.object({ type: z.enum(LETTER_TYPES as [string, ...string[]]) }).strict();
 type PersonalDetails = { gender?: string | null; address?: { line1?: string; line2?: string | null; city?: string; state?: string; postalCode?: string } | null };
@@ -17,24 +17,27 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const sql = db();
     const [employee] = await sql<{
       id: string; employee_code: string; business_head_id: string; department_id: string | null; first_name: string; last_name: string | null; position: string; phone: string | null;
-      date_joined: string; probation_end_date: string | null; notice_start_date: string | null; last_working_date: string | null; company: string; department: string | null; personal_details_encrypted: Uint8Array | null;
-    }[]>`SELECT e.id,e.employee_code,e.business_head_id,e.department_id,e.first_name,e.last_name,e.position,e.phone,e.date_joined::text AS date_joined,e.probation_end_date::text AS probation_end_date,e.notice_start_date::text AS notice_start_date,e.last_working_date::text AS last_working_date,e.personal_details_encrypted,b.name AS company,d.name AS department FROM employees e JOIN business_heads b ON b.id=e.business_head_id LEFT JOIN departments d ON d.id=e.department_id WHERE e.id=${id}`;
+      date_joined: string; probation_end_date: string | null; confirmation_date: string | null; status: string; notice_start_date: string | null; last_working_date: string | null; company: string; department: string | null; personal_details_encrypted: Uint8Array | null;
+    }[]>`SELECT e.id,e.employee_code,e.business_head_id,e.department_id,e.first_name,e.last_name,e.position,e.phone,e.date_joined::text AS date_joined,e.probation_end_date::text AS probation_end_date,e.confirmation_date::text AS confirmation_date,e.status,e.notice_start_date::text AS notice_start_date,e.last_working_date::text AS last_working_date,e.personal_details_encrypted,b.name AS company,d.name AS department FROM employees e JOIN business_heads b ON b.id=e.business_head_id LEFT JOIN departments d ON d.id=e.department_id WHERE e.id=${id}`;
     if (!employee) return fail("Employee not found", 404);
     const user = await requireApiUser("people:write", employee.business_head_id, employee.department_id);
     if (user instanceof Response) return user;
 
     const [exit] = await sql<{ submitted_date: string; proposed: string; approved: string | null; notice_days: number }[]>`SELECT submitted_date::text AS submitted_date,proposed_last_working_date::text AS proposed,approved_last_working_date::text AS approved,notice_days FROM separations WHERE employee_id=${id} AND status IN ('pending','approved','completed') ORDER BY created_at DESC LIMIT 1`;
     const lastWorkingDay = exit ? (exit.approved || exit.proposed) : employee.last_working_date;
-    if (type !== "offer" && !lastWorkingDay) return fail("Record the resignation first: open the Lifecycle dates card and click Record resignation. The letter needs the last working day.", 409);
+    if (NEEDS_LAST_WORKING_DAY.includes(type) && !lastWorkingDay) return fail("Record the resignation first: open the Lifecycle dates card and click Record resignation. The letter needs the last working day.", 409);
 
     const personal = employee.personal_details_encrypted ? openJson<PersonalDetails>(employee.personal_details_encrypted) : null;
     const address = personal?.address;
     const addressLines = address ? [address.line1, address.line2, [address.city, address.state].filter(Boolean).join(", ") + (address.postalCode ? ` - ${address.postalCode}` : "")].filter((line): line is string => Boolean(line && line.trim())) : [];
 
-    let monthlySalary: number | null = null;
-    if (type === "offer" && hasPermissionForScope(user, "payroll:read", employee.business_head_id, employee.department_id)) {
-      const [pay] = await sql<{ monthly_gross: string }[]>`SELECT monthly_gross FROM employee_compensation WHERE employee_id=${id} AND effective_from<=greatest(current_date,${employee.date_joined}::date) ORDER BY effective_from DESC LIMIT 1`;
-      if (pay) monthlySalary = Number(pay.monthly_gross);
+    // Salary: the offer and appointment letters show the pay at joining; the revision letter shows the latest pay and when it started.
+    let monthlySalary: number | null = null; let salaryEffectiveDate: string | null = null;
+    if (["offer", "appointment", "salary_revision"].includes(type) && hasPermissionForScope(user, "payroll:read", employee.business_head_id, employee.department_id)) {
+      const [pay] = type === "salary_revision"
+        ? await sql<{ monthly_gross: string; effective_from: string }[]>`SELECT monthly_gross,effective_from::text AS effective_from FROM employee_compensation WHERE employee_id=${id} AND effective_from<=current_date ORDER BY effective_from DESC LIMIT 1`
+        : await sql<{ monthly_gross: string; effective_from: string }[]>`SELECT monthly_gross,effective_from::text AS effective_from FROM employee_compensation WHERE employee_id=${id} ORDER BY (effective_from<=${employee.date_joined}::date) DESC,CASE WHEN effective_from<=${employee.date_joined}::date THEN effective_from END DESC,effective_from ASC LIMIT 1`;
+      if (pay) { monthlySalary = Number(pay.monthly_gross); salaryEffectiveDate = pay.effective_from; }
     }
 
     const result = await sql.begin(async tx => {
@@ -57,6 +60,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       title: titleFor(personal?.gender), addressLines, mobile: employee.phone, employeeCode: employee.employee_code, position: employee.position, department: employee.department,
       joinedDate: employee.date_joined, probationMonths: probationMonths(employee.date_joined, employee.probation_end_date), monthlySalary,
       resignationDate: exit?.submitted_date ?? employee.notice_start_date, lastWorkingDay, noticeDays: exit ? exit.notice_days : null,
+      confirmationDate: employee.confirmation_date ?? employee.probation_end_date, salaryEffectiveDate,
+      employmentEnded: !["probation", "active", "notice_period"].includes(employee.status) || Boolean(lastWorkingDay && lastWorkingDay < result.today),
     };
     return ok(letter);
   } catch (error) { return apiError(error); }

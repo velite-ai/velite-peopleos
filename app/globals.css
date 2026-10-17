@@ -232,3 +232,11 @@ html,body{font-family:"Segoe UI",system-ui,-apple-system,Roboto,"Helvetica Neue"
   .letter-sheet{box-shadow:none;margin:0;width:210mm}
   .letter-second{break-before:page}
 }
+.letter-toolbar .letter-hint{flex:1 1 100%;margin:0;color:#4d5a53;font-size:14px}
+.letter-check{gap:6px!important}
+.letter-check input{width:auto!important;height:auto!important}
+.letter-sheet{position:relative}
+.letterhead-space{position:absolute;left:22mm;right:22mm;top:0;height:calc(var(--letter-top) - 6mm);display:grid;place-items:center;border-bottom:1px dashed #b9c3bc;color:#9aa69f;font:12px Arial,sans-serif;letter-spacing:.3px}
+.letter-accept-inline{margin-top:30pt}
+.print-letters-group{padding:4px 0}
+.print-letters-group h4{margin:10px 21px 2px;font-size:13px;letter-spacing:.4px;text-transform:uppercase;color:#4d5a53}
