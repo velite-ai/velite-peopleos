@@ -33,6 +33,8 @@ async function assess(q: Query, employee: Employee, newHeadId: string) {
   const [department] = employee.department_id ? await q<{ name: string }[]>`SELECT name FROM departments WHERE id=${employee.department_id}` : [];
   const [match] = department ? await q<{ id: string; name: string }[]>`SELECT id,name FROM departments WHERE business_head_id=${newHeadId} AND active=true AND lower(name)=lower(${department.name}) LIMIT 1` : [];
   const [reports] = await q<{ n: number }[]>`SELECT count(*)::int AS n FROM employees WHERE reporting_manager_id=${employee.id}`;
+  // Reporting lines can cross companies, so a move keeps them. Say who the manager is when it is someone from a third company or the old one.
+  const [manager] = employee.reporting_manager_id ? await q<{ name: string; company: string }[]>`SELECT concat_ws(' ',m.first_name,m.last_name) AS name,b.name AS company FROM employees m JOIN business_heads b ON b.id=m.business_head_id WHERE m.id=${employee.reporting_manager_id}` : [];
   const warnings: string[] = [];
   if (employee.user_id) {
     const [roles] = await q<{ n: number }[]>`SELECT count(*)::int AS n FROM user_roles WHERE user_id=${employee.user_id} AND business_head_id=${employee.business_head_id}`;
@@ -41,7 +43,8 @@ async function assess(q: Query, employee: Employee, newHeadId: string) {
   return {
     from: from.name, to: to.name, moves, blocked, warnings,
     newDepartmentId: match?.id ?? null,
-    cleared: { department: department ? { was: department.name, now: match?.name ?? null } : null, reportingManager: Boolean(employee.reporting_manager_id), directReports: reports.n, companyDetails: Boolean(employee.legal_entity_id || employee.work_location_id || employee.cost_centre_id || employee.job_position_id) },
+    kept: { reportingManager: manager ? `${manager.name} (${manager.company})` : null, directReports: reports.n },
+    cleared: { department: department ? { was: department.name, now: match?.name ?? null } : null, companyDetails: Boolean(employee.legal_entity_id || employee.work_location_id || employee.cost_centre_id || employee.job_position_id) },
   };
 }
 
@@ -72,13 +75,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       if (plan.error) return { error: plan.error };
       if (plan.blocked.length) return { error: plan.blocked.join("; ") };
       const before = { businessHead: plan.from, departmentId: locked.department_id, reportingManagerId: locked.reporting_manager_id };
-      const unassigned = await tx`UPDATE employees SET reporting_manager_id=NULL,updated_at=now() WHERE reporting_manager_id=${id} RETURNING id`;
-      await tx`UPDATE employees SET business_head_id=${input.businessHeadId},department_id=${plan.newDepartmentId},reporting_manager_id=NULL,legal_entity_id=NULL,work_location_id=NULL,cost_centre_id=NULL,job_position_id=NULL,updated_at=now() WHERE id=${id}`;
-      await tx`INSERT INTO employee_events (employee_id,event_type,effective_date,previous_values,new_values,reason,approved_by,created_by) VALUES (${id},'company_corrected',current_date,${tx.json(before)},${tx.json({ businessHead: plan.to, departmentId: plan.newDepartmentId, directReportsUnassigned: unassigned.length })},${input.reason},${user.id},${user.id})`;
+      await tx`UPDATE employees SET business_head_id=${input.businessHeadId},department_id=${plan.newDepartmentId},legal_entity_id=NULL,work_location_id=NULL,cost_centre_id=NULL,job_position_id=NULL,updated_at=now() WHERE id=${id}`;
+      await tx`INSERT INTO employee_events (employee_id,event_type,effective_date,previous_values,new_values,reason,approved_by,created_by) VALUES (${id},'company_corrected',current_date,${tx.json(before)},${tx.json({ businessHead: plan.to, departmentId: plan.newDepartmentId, reportingManagerKept: plan.kept.reportingManager, directReportsKept: plan.kept.directReports })},${input.reason},${user.id},${user.id})`;
       for (const head of [locked.business_head_id, input.businessHeadId]) {
-        await tx`INSERT INTO audit_events (actor_user_id,action,entity_type,entity_id,business_head_id,before_data,after_data,reason) VALUES (${user.id},'employee.company_correct','employee',${id},${head},${tx.json({ employeeCode: locked.employee_code, company: plan.from })},${tx.json({ employeeCode: locked.employee_code, company: plan.to, moved: plan.moves, directReportsUnassigned: unassigned.length })},${input.reason})`;
+        await tx`INSERT INTO audit_events (actor_user_id,action,entity_type,entity_id,business_head_id,before_data,after_data,reason) VALUES (${user.id},'employee.company_correct','employee',${id},${head},${tx.json({ employeeCode: locked.employee_code, company: plan.from })},${tx.json({ employeeCode: locked.employee_code, company: plan.to, moved: plan.moves, reportingManagerKept: plan.kept.reportingManager, directReportsKept: plan.kept.directReports })},${input.reason})`;
       }
-      return { done: { from: plan.from, to: plan.to, moved: plan.moves, directReportsUnassigned: unassigned.length } };
+      return { done: { from: plan.from, to: plan.to, moved: plan.moves, reportingManagerKept: plan.kept.reportingManager, directReportsKept: plan.kept.directReports } };
     });
     if ("error" in result) return fail(result.error as string, 409);
     return ok(result.done);

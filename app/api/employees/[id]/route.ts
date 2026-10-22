@@ -40,7 +40,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     const canViewCompensation = hasPermissionForScope(user, "payroll:read", record.business_head_id, record.department_id);
     const canSeeExit = hasPermissionForScope(user, "separation:read", record.business_head_id, record.department_id);
     const [employee, events, compensation, salaryRegisterLines] = await Promise.all([
-      sql`SELECT e.id,e.employee_code,e.user_id,e.business_head_id,e.department_id,e.reporting_manager_id,e.first_name,e.last_name,e.guardian_name,e.source_metadata,e.work_email,e.phone,e.position,e.grade,e.work_location,e.employment_type,e.status,e.date_joined,e.probation_end_date,e.confirmation_date,e.next_salary_revision_date,e.notice_start_date,e.last_working_date,e.photo_updated_at,e.legal_entity_id,e.work_location_id,e.cost_centre_id,e.job_position_id,e.created_at,e.updated_at,b.name AS business_head,d.name AS department,concat_ws(' ',m.first_name,m.last_name) AS reporting_manager FROM employees e JOIN business_heads b ON b.id=e.business_head_id LEFT JOIN departments d ON d.id=e.department_id LEFT JOIN employees m ON m.id=e.reporting_manager_id WHERE e.id=${id}`,
+      sql`SELECT e.id,e.employee_code,e.user_id,e.business_head_id,e.department_id,e.reporting_manager_id,e.first_name,e.last_name,e.guardian_name,e.source_metadata,e.work_email,e.phone,e.position,e.grade,e.work_location,e.employment_type,e.status,e.date_joined,e.probation_end_date,e.confirmation_date,e.next_salary_revision_date,e.notice_start_date,e.last_working_date,e.photo_updated_at,e.legal_entity_id,e.work_location_id,e.cost_centre_id,e.job_position_id,e.created_at,e.updated_at,b.name AS business_head,d.name AS department,concat_ws(' ',m.first_name,m.last_name) AS reporting_manager,mb.name AS reporting_manager_company FROM employees e JOIN business_heads b ON b.id=e.business_head_id LEFT JOIN departments d ON d.id=e.department_id LEFT JOIN employees m ON m.id=e.reporting_manager_id LEFT JOIN business_heads mb ON mb.id=m.business_head_id WHERE e.id=${id}`,
       sql`SELECT ev.id,ev.event_type,ev.effective_date,ev.previous_values,ev.new_values,ev.reason,ev.approved_by,ev.created_by,ev.created_at,u.full_name AS created_by_name FROM employee_events ev JOIN users u ON u.id=ev.created_by WHERE ev.employee_id=${id} ORDER BY ev.effective_date DESC,ev.created_at DESC`,
       canViewCompensation ? sql`SELECT id,effective_from,effective_to,annual_ctc,monthly_gross,structure,reason,created_at FROM employee_compensation WHERE employee_id=${id} ORDER BY effective_from DESC` : Promise.resolve([]),
       canViewCompensation ? sql`SELECT l.id,i.period_month,i.source_file_name,l.register_type,l.attendance_days,l.monthly_rates,l.earned_dues,l.deductions,l.total_dues,l.total_deductions,l.net_payable FROM salary_register_lines l JOIN salary_register_imports i ON i.id=l.import_id WHERE l.employee_id=${id} ORDER BY i.period_month DESC` : Promise.resolve([]),
@@ -75,8 +75,17 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       if (!department) return fail("Department does not belong to the employee business head", 422);
     }
     if (input.reportingManagerId) {
-      const [manager] = await sql`SELECT id FROM employees WHERE id=${input.reportingManagerId} AND business_head_id=${record.business_head_id} AND status IN ('probation','active','notice_period')`;
-      if (!manager) return fail("Reporting manager must be an active employee in the same business head", 422);
+      // The manager can work in any Velite company, but must be working now and must not already report (directly or through others) to this person.
+      const [manager] = await sql`SELECT id FROM employees WHERE id=${input.reportingManagerId} AND status IN ('probation','active','notice_period')`;
+      if (!manager) return fail("Reporting manager must be someone who is currently working at Velite", 422);
+      const [loop] = await sql`
+        WITH RECURSIVE chain AS (
+          SELECT id,reporting_manager_id FROM employees WHERE id=${input.reportingManagerId}
+          UNION
+          SELECT e.id,e.reporting_manager_id FROM employees e JOIN chain ON e.id=chain.reporting_manager_id
+        )
+        SELECT 1 AS found FROM chain WHERE id=${id} LIMIT 1`;
+      if (loop) return fail("That person already reports to this employee, so they cannot also be this employee's manager", 422);
     }
     const [updated] = await sql.begin(async tx => {
       const rows = await tx`

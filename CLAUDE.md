@@ -434,3 +434,17 @@ refuses anything that is not `clean` (HTTP 423), so no document could be opened.
 - The worker takes batches of 12 repeatedly for up to four minutes per cycle (`SCAN_TIME_BUDGET_MS`), so a large backlog clears in one run
   (428 imported documents were waiting on 22 Oct 2026; a test run cleared 430 in about a second). A file whose object is missing from
   storage ends in `error` (retried with back-off, then left) and stays "Awaiting check".
+
+---
+
+## 16. Reporting manager across companies — Oct 2026
+
+A reporting manager can work in **any** Velite company (before, only the same company was allowed).
+- Staff record → Employment → Edit employment: the **Reporting manager** box lists everyone currently working (probation / active / notice period), grouped by company.
+  List comes from `GET /api/employees/[id]/manager-options` (needs `people:write` on that person). It leaves out the person and everyone who reports to them
+  (directly or through others), so a reporting loop cannot be created; the save in `PATCH /api/employees/[id]` checks the same and refuses people who have left.
+- The record shows the manager's company when it differs from the person's own.
+- **Change company** (correcting a wrong company) now **keeps** the person's manager and the people reporting to them; the preview says so under "Stays as it is".
+  Before, both were cleared.
+- Access is unchanged: a manager only sees leave / attendance of their reports when their own login already has access to that company
+  (a login limited to one company does not get into another company's data just by being someone's manager; the worker's MANAGER notifications follow the same rule).
