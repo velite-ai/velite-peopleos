@@ -240,3 +240,9 @@ html,body{font-family:"Segoe UI",system-ui,-apple-system,Roboto,"Helvetica Neue"
 .letter-accept-inline{margin-top:30pt}
 .print-letters-group{padding:4px 0}
 .print-letters-group h4{margin:10px 21px 2px;font-size:13px;letter-spacing:.4px;text-transform:uppercase;color:#4d5a53}
+
+/* Hiring: offer letters list */
+.offer-row{display:grid;grid-template-columns:28px 1fr auto;gap:12px;align-items:center;padding:14px 21px;border-top:1px solid #eef0ee}
+.offer-row>i{width:27px;height:27px;border-radius:7px;background:#edf3ef;color:#357256;display:grid;place-items:center;font-style:normal;font-size:14px;font-weight:700}
+.offer-row b,.offer-row span{display:block}.offer-row b{font-size:15px}.offer-row span{font-size:13px;color:#4d5a53;margin-top:4px}
+.offer-row .secondary{height:34px;padding:0 14px;white-space:nowrap}

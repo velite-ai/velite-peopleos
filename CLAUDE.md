@@ -397,7 +397,16 @@ so it carries the company name at the top (tick box in the toolbar).
   Table `printed_letters` (migration 025) keeps one row per person, letter type and day, so printing again the same day reuses the number.
   Every opening of a letter is in `audit_events` (`employee_letter.print`).
 - The older approval-based letters ("Request letter" on the same tab, worker-made PDF) are unchanged.
-- Not built: offer letter printed from Hiring (candidate offers), company letterhead image in the downloaded PDF, saving a copy in Documents.
+- **Offer letter from Hiring** (Oct 2026): Hiring screen → **Make offer letter** (candidate, title, position, joining date, monthly salary during
+  probation, probation months, address) saves a `candidate_offers` row (details in `terms`: title, address, probationMonths, monthlySalary) and
+  opens the preview; the **Offer letters** list on the same screen has **Preview & print** for any offer (`/letters/print?type=offer&offer=<id>`,
+  API `app/api/recruitment/offers/[id]/print-letter`, needs `recruitment:write`). Candidates have no address column, so it is entered in the form.
+  The register (`printed_letters`, migration 026) now holds either an employee or an offer (`offer_id`); numbering is shared per company per day
+  (`lib/letter-register.ts`).
+- **Trainee experience certificate**: Letters tab → Leaving → *Experience certificate (trainee)* (type `trainee_certificate`: "has undergone training as … from … to …").
+  It can be printed at once: if no last working day is recorded, today's date stands in for the end of the training and the preview warns;
+  set it first with Edit dates (Last working day) for a fixed date.
+- Not built: company letterhead image in the downloaded PDF, saving a copy in Documents.
 
 ---
 

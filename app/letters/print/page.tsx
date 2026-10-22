@@ -16,10 +16,12 @@ export default function PrintLetterPage() {
     if (started.current) return;
     started.current = true;
     const query = new URLSearchParams(window.location.search);
-    const type = query.get("type") as LetterType | null; const employee = query.get("employee");
-    if (!employee || !type || !LETTER_TYPES.includes(type)) { setError("This letter link is not complete. Open it again from the Letters tab of the staff record."); return; }
+    const type = query.get("type") as LetterType | null; const employee = query.get("employee"); const offer = query.get("offer");
+    if ((!employee && !offer) || !type || !LETTER_TYPES.includes(type) || (offer && type !== "offer")) { setError("This letter link is not complete. Open it again from the Letters tab of the staff record, or from the Hiring screen."); return; }
     try { const saved = window.localStorage.getItem("velite_letter_top_cm"); if (saved) setTop(saved); } catch { /* the default is fine */ }
-    fetch(`/api/employees/${encodeURIComponent(employee)}/print-letter`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ type }) })
+    // An offer letter printed from the Hiring screen belongs to a candidate's offer; every other letter belongs to a staff record.
+    const address = offer ? `/api/recruitment/offers/${encodeURIComponent(offer)}/print-letter` : `/api/employees/${encodeURIComponent(employee as string)}/print-letter`;
+    fetch(address, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ type }) })
       .then(async response => { const body = await response.json().catch(() => null); if (!response.ok) throw new Error(body?.error?.message || "The letter could not be prepared."); return body.data as LetterData; })
       .then(setData).catch(problem => setError((problem as Error).message));
   }, []);

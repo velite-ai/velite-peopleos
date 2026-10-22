@@ -6,7 +6,7 @@ const base = {
   type: "offer", company: "Velite Healthcare", reference: "VH/2026-27/05/13/1", date: "2026-05-13", name: "Tisha", title: "Ms.",
   addressLines: ["BXII 886, Shahpura Road", "Ludhiana"], mobile: "7901710703", employeeCode: "84", position: "Executive - F & D", department: "Office",
   joinedDate: "2026-06-01", probationMonths: 6, monthlySalary: 18333, resignationDate: null, lastWorkingDay: null, noticeDays: null,
-  confirmationDate: null, salaryEffectiveDate: "2026-06-01", employmentEnded: false,
+  confirmationDate: null, salaryEffectiveDate: "2026-06-01", employmentEnded: false, endDateAssumed: false,
 };
 
 test("reference number: company, financial year, month, day and the day's serial (as in the sample offer letter)", () => {
@@ -82,7 +82,7 @@ test("experience letter states the period of service", () => {
 });
 
 test("every letter type has a label, sits in one group on the Letters tab, and builds without errors", () => {
-  assert.equal(LETTER_TYPES.length, 8);
+  assert.equal(LETTER_TYPES.length, 9);
   assert.deepEqual(LETTER_GROUPS.flatMap(group => group.types).sort(), [...LETTER_TYPES].sort());
   for (const type of LETTER_TYPES) {
     assert.ok(LETTER_LABELS[type]);
@@ -138,4 +138,18 @@ test("relieving letter relieves the person from the close of the last working da
   assert.match(letter.paragraphs[0], /resignation dated 17 October 2026\. We confirm that you stand relieved from the services of Velite Healthcare with effect from the close of working hours on 10 November 2026/);
   assert.match(letter.paragraphs[1], /handed over charge and completed the exit formalities/);
   assert.equal(buildLetter({ ...base, type: "relieving" }).warnings.length, 1);
+});
+
+test("trainee experience certificate states the training period and warns when the end date is only assumed", () => {
+  const trainee = { ...base, type: "trainee_certificate", title: "", name: "Rohan Mehta", position: "Trainee Chemist", department: "Quality", employeeCode: "T-12", joinedDate: "2026-06-01", lastWorkingDay: "2026-09-30" };
+  const letter = buildLetter(trainee);
+  assert.equal(letter.heading, "TO WHOM IT MAY CONCERN");
+  assert.equal(letter.subject, "Experience Certificate");
+  assert.match(letter.paragraphs[0], /This is to certify that Rohan Mehta \(Employee Code T-12\) has undergone training as Trainee Chemist in the Quality department at Velite Healthcare from 1 June 2026 to 30 September 2026\./);
+  assert.match(letter.paragraphs[1], /During the training period, the conduct and performance of Rohan Mehta were found to be satisfactory/);
+  assert.deepEqual(letter.warnings, []);
+  assert.deepEqual(letter.addressee, []); assert.equal(letter.cc, null); assert.equal(letter.checklist, null);
+  const assumed = buildLetter({ ...trainee, endDateAssumed: true });
+  assert.equal(assumed.warnings.length, 1); assert.match(assumed.warnings[0], /today's date is used/);
+  assert.ok(!NEEDS_LAST_WORKING_DAY.includes("trainee_certificate")); // it can be printed straight away
 });
