@@ -1,4 +1,5 @@
 import type { LetterContent } from "./letter-rules";
+import type { Letterhead } from "./letterheads";
 
 /*
  * Turns a printable letter into a real PDF file (A4, Helvetica) that can be saved and shared.
@@ -8,7 +9,7 @@ import type { LetterContent } from "./letter-rules";
 
 const PAGE_W = 595.28; const PAGE_H = 841.89; const MM = 72 / 25.4;
 const FONT_SIZE = 11; const LEADING = 17; const PARAGRAPH_GAP = 10;
-const SIDE = 22 * MM; const BOTTOM = 20 * MM; const TEXT_W = PAGE_W - 2 * SIDE;
+const SIDE = 22 * MM; const DEFAULT_BOTTOM = 20 * MM; const TEXT_W = PAGE_W - 2 * SIDE;
 
 // Helvetica and Helvetica-Bold glyph widths (1/1000 em) for ASCII 32..126.
 const HELVETICA = [278, 278, 355, 556, 556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278, 556, 556, 556, 556, 556, 556, 556, 556, 556, 556, 278, 278, 584, 584, 584, 556, 1015, 667, 667, 722, 722, 667, 611, 778, 722, 278, 500, 667, 556, 833, 722, 778, 667, 778, 722, 667, 611, 722, 667, 944, 667, 667, 611, 278, 278, 278, 469, 556, 333, 556, 556, 500, 556, 556, 278, 556, 556, 222, 222, 500, 222, 833, 556, 556, 556, 556, 333, 500, 278, 556, 500, 722, 500, 500, 500, 334, 260, 334, 584];
@@ -37,11 +38,11 @@ function width(encoded: string, font: FontName, size: number): number {
 class Document {
   pages: string[][] = [[]];
   y: number; // distance from the top of the current page
-  top: number;
-  constructor(top: number) { this.top = top; this.y = top; }
+  top: number; bottom: number;
+  constructor(top: number, bottom: number) { this.top = top; this.bottom = bottom; this.y = top; }
   get ops() { return this.pages[this.pages.length - 1]; }
   newPage() { this.pages.push([]); this.y = this.top; }
-  ensure(height: number) { if (this.y + height > PAGE_H - BOTTOM) this.newPage(); }
+  ensure(height: number) { if (this.y + height > PAGE_H - this.bottom) this.newPage(); }
   text(x: number, baselineFromTop: number, text: string, font: FontName, size: number, spacing = 0) {
     // Tw (word spacing) stays in force until changed, so every line sets it: 0 unless the line is justified.
     this.ops.push(`BT /${font} ${size} Tf ${spacing.toFixed(3)} Tw ${x.toFixed(2)} ${(PAGE_H - baselineFromTop).toFixed(2)} Td (${escapeText(text)}) Tj ET`);
@@ -90,13 +91,33 @@ function acceptanceBlock(doc: Document) {
   doc.y += LEADING * 4 + 20;
 }
 
-export type LetterPdfOptions = { company?: string; title?: string };
+// Width, height and colour channels of a JPEG, read from its start-of-frame marker. Null when it is not a readable JPEG.
+export function jpegInfo(bytes: Uint8Array): { width: number; height: number; components: number } | null {
+  if (bytes[0] !== 0xff || bytes[1] !== 0xd8) return null;
+  let offset = 2;
+  while (offset + 9 < bytes.length) {
+    if (bytes[offset] !== 0xff) { offset++; continue; }
+    const marker = bytes[offset + 1];
+    if (marker === 0xff) { offset++; continue; }
+    if (marker === 0xd8 || (marker >= 0xd0 && marker <= 0xd7) || marker === 0x01) { offset += 2; continue; }
+    const length = (bytes[offset + 2] << 8) | bytes[offset + 3];
+    if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+      return { height: (bytes[offset + 5] << 8) | bytes[offset + 6], width: (bytes[offset + 7] << 8) | bytes[offset + 8], components: bytes[offset + 9] };
+    }
+    offset += 2 + length;
+  }
+  return null;
+}
+
+// `letterhead` is the company letterhead picture (JPEG bytes) that goes behind every page; the text then keeps clear of its header and footer.
+export type LetterPdfOptions = { company?: string; title?: string; letterhead?: { design: Letterhead; jpeg: Uint8Array } };
 
 // Builds the PDF. With `company`, the company name is printed at the top, because a shared file has no pre-printed letterhead.
 export function buildLetterPdf(letter: LetterContent, options: LetterPdfOptions = {}): Uint8Array {
-  const top = 20 * MM;
-  const doc = new Document(top);
-  if (options.company) {
+  const head = options.letterhead && jpegInfo(options.letterhead.jpeg) ? options.letterhead : undefined;
+  const doc = new Document(head ? head.design.topPt : 20 * MM, head ? head.design.bottomPt : DEFAULT_BOTTOM);
+  // The letterhead already carries the company name.
+  if (options.company && !head) {
     doc.row(options.company.toUpperCase(), "F2", "center", false, 15);
     doc.line(SIDE, doc.y + 4, PAGE_W - SIDE, doc.y + 4, 0.8);
     doc.gap(28);
@@ -122,8 +143,7 @@ export function buildLetterPdf(letter: LetterContent, options: LetterPdfOptions 
 
   if (letter.checklist) {
     doc.newPage();
-    if (options.company) doc.gap(0);
-    doc.row("Checklist of Mandatory Documents Required", "F2", "left", true); doc.gap(PARAGRAPH_GAP);
+        doc.row("Checklist of Mandatory Documents Required", "F2", "left", true); doc.gap(PARAGRAPH_GAP);
     const tableW = TEXT_W * 0.78; const firstW = tableW * 0.14; const rowH = 40;
     const draw = (cells: [string, string], bold: boolean) => {
       doc.ensure(rowH);
@@ -142,10 +162,10 @@ export function buildLetterPdf(letter: LetterContent, options: LetterPdfOptions 
     acceptanceBlock(doc);
   }
 
-  return assemble(doc.pages, options.title || `${letter.subject} ${letter.reference}`);
+  return assemble(doc.pages, options.title || `${letter.subject} ${letter.reference}`, head);
 }
 
-function assemble(pages: string[][], title: string): Uint8Array {
+function assemble(pages: string[][], title: string, head?: { design: Letterhead; jpeg: Uint8Array }): Uint8Array {
   const objects: string[] = [];
   const add = (body: string) => { objects.push(body); return objects.length; };
   add("<< /Type /Catalog /Pages 2 0 R >>"); // 1
@@ -153,11 +173,20 @@ function assemble(pages: string[][], title: string): Uint8Array {
   add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>"); // 3
   add("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>"); // 4
   const info = add(`<< /Title (${escapeText(encode(title))}) /Producer (Velite PeopleOS) >>`); // 5
+  // The letterhead is one shared picture drawn first on every page, so the text sits on top of it.
+  let picture = 0; let pictureOps = ""; const resources = (extra: string) => `<< /Font << /F1 3 0 R /F2 4 0 R >>${extra} >>`;
+  if (head) {
+    const size = jpegInfo(head.jpeg)!;
+    let data = ""; for (let index = 0; index < head.jpeg.length; index += 8192) data += String.fromCharCode(...head.jpeg.subarray(index, index + 8192));
+    picture = add(`<< /Type /XObject /Subtype /Image /Width ${size.width} /Height ${size.height} /ColorSpace /${size.components === 1 ? "DeviceGray" : "DeviceRGB"} /BitsPerComponent 8 /Filter /DCTDecode /Length ${data.length} >>\nstream\n${data}\nendstream`);
+    const drawnH = head.design.fit === "stretch" ? PAGE_H : (PAGE_W * size.height) / size.width;
+    pictureOps = `q ${PAGE_W} 0 0 ${drawnH.toFixed(2)} 0 ${(PAGE_H - drawnH).toFixed(2)} cm /Im1 Do Q\n`;
+  }
   const pageIds: number[] = [];
   for (const ops of pages) {
-    const stream = ops.join("\n");
+    const stream = pictureOps + ops.join("\n");
     const content = add(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
-    pageIds.push(add(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE_W} ${PAGE_H}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${content} 0 R >>`));
+    pageIds.push(add(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE_W} ${PAGE_H}] /Resources ${resources(picture ? ` /XObject << /Im1 ${picture} 0 R >>` : "")} /Contents ${content} 0 R >>`));
   }
   objects[1] = `<< /Type /Pages /Kids [${pageIds.map(id => `${id} 0 R`).join(" ")}] /Count ${pageIds.length} >>`;
 

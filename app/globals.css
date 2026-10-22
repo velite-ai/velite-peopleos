@@ -246,3 +246,6 @@ html,body{font-family:"Segoe UI",system-ui,-apple-system,Roboto,"Helvetica Neue"
 .offer-row>i{width:27px;height:27px;border-radius:7px;background:#edf3ef;color:#357256;display:grid;place-items:center;font-style:normal;font-size:14px;font-weight:700}
 .offer-row b,.offer-row span{display:block}.offer-row b{font-size:15px}.offer-row span{font-size:13px;color:#4d5a53;margin-top:4px}
 .offer-row .secondary{height:34px;padding:0 14px;white-space:nowrap}
+
+/* Letterhead picture behind the letter: preview only, never printed (the real letterhead paper is in the printer). */
+@media screen{.letter-sheet.with-head{background:#fff var(--head-img) 0 0/var(--head-size) no-repeat;padding-top:var(--head-top);padding-bottom:var(--head-bottom)}}

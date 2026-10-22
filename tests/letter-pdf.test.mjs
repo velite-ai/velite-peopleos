@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildLetter, LETTER_TYPES } from "../lib/letter-rules.ts";
-import { buildLetterPdf } from "../lib/letter-pdf.ts";
+import { buildLetterPdf, jpegInfo } from "../lib/letter-pdf.ts";
 
 const data = {
   type: "offer", company: "Velite Healthcare", reference: "VH/2026-27/05/13/1", date: "2026-05-13", name: "Tisha", title: "Ms.",
@@ -66,4 +66,64 @@ test("word spacing never leaks from a justified paragraph into the lines after i
   const closing = lines.filter(line => /\((For Velite Healthcare,|Authorized Signatory|cc: Employee file|Dated:|Accepted & Agreed By|Employee Name)\) Tj/.test(line));
   assert.equal(closing.length, 6);
   assert.ok(closing.every(line => / 0\.000 Tw /.test(line)), "signature and acceptance lines are not stretched");
+});
+
+// ---- company letterheads ----
+import { readFileSync } from "node:fs";
+import { LETTERHEADS, letterheadFor } from "../lib/letterheads.ts";
+
+const headJpeg = key => new Uint8Array(readFileSync(new URL(`../public/letterheads/${key}.jpg`, import.meta.url)));
+
+test("each company gets its own letterhead; Others 1 and Others 2 have none", () => {
+  assert.equal(letterheadFor("Velite Healthcare")?.key, "healthcare");
+  assert.equal(letterheadFor("Velite Pharmaceuticals")?.key, "pharmaceuticals");
+  assert.equal(letterheadFor("Velite Sciences Private Limited")?.key, "sciences");
+  assert.equal(letterheadFor("Velite India")?.key, "india");
+  assert.equal(letterheadFor("Others 1"), undefined);
+  assert.equal(letterheadFor("Others 2"), undefined);
+  assert.equal(letterheadFor(undefined), undefined);
+});
+
+test("the letterhead pictures are readable JPEGs at about A4 size", () => {
+  for (const key of Object.keys(LETTERHEADS)) {
+    const info = jpegInfo(headJpeg(key));
+    assert.ok(info, key);
+    assert.equal(info.width, 1240, key);
+    assert.ok(info.height >= 1500 && info.height <= 1760, key);
+    assert.ok(readFileSync(new URL(`../public/letterheads/${key}.jpg`, import.meta.url)).length < 150_000, `${key} stays small`);
+  }
+  assert.equal(jpegInfo(new Uint8Array([1, 2, 3, 4])), null);
+});
+
+test("with a letterhead the PDF embeds the picture on every page, stays well-formed, and does not repeat the company name", () => {
+  for (const key of Object.keys(LETTERHEADS)) {
+    const design = LETTERHEADS[key];
+    const pdf = text(buildLetterPdf(buildLetter({ ...data, type: "offer" }), { company: "Velite Healthcare", letterhead: { design, jpeg: headJpeg(key) } }));
+    const pages = (pdf.match(/\/Type \/Page /g) ?? []).length;
+    assert.equal(pages, 2, "offer letter = letter + checklist page");
+    assert.equal((pdf.match(/\/Im1 Do/g) ?? []).length, pages, `${key}: picture on every page`);
+    assert.equal((pdf.match(/\/Subtype \/Image/g) ?? []).length, 1, `${key}: picture stored once`);
+    assert.doesNotMatch(pdf, /VELITE HEALTHCARE\) Tj/, "the letterhead already carries the company name");
+    const startxref = Number(/startxref\n(\d+)\n%%EOF/.exec(pdf)[1]);
+    const offsets = [...pdf.slice(startxref).matchAll(/(\d{10}) 00000 n /g)].map(match => Number(match[1]));
+    offsets.forEach((offset, index) => assert.equal(pdf.slice(offset, offset + `${index + 1} 0 obj`.length), `${index + 1} 0 obj`, `${key} object ${index + 1}`));
+    const image = /\/Length (\d+) >>\nstream\n/.exec(pdf.slice(pdf.indexOf("/Subtype /Image")));
+    assert.equal(Number(image[1]), headJpeg(key).length, `${key}: JPEG bytes stored unchanged`);
+  }
+});
+
+test("text keeps clear of the letterhead: first line below the header, last line above the footer", () => {
+  for (const key of Object.keys(LETTERHEADS)) {
+    const design = LETTERHEADS[key];
+    const pdf = text(buildLetterPdf(buildLetter({ ...data, type: "relieving" }), { letterhead: { design, jpeg: headJpeg(key) } }));
+    const ys = [...pdf.matchAll(/ Td \(/g)].length && [...pdf.matchAll(/Tw [\d.]+ ([\d.]+) ([\d.]+) Td/g)].map(match => Number(match[2]));
+    assert.ok(Math.max(...ys) <= 841.89 - design.topPt, `${key}: starts below the header`);
+    assert.ok(Math.min(...ys) >= design.bottomPt, `${key}: ends above the footer`);
+  }
+});
+
+test("a broken letterhead file is ignored and the plain layout with the company name is used", () => {
+  const pdf = text(buildLetterPdf(buildLetter(data), { company: "Velite Healthcare", letterhead: { design: LETTERHEADS.healthcare, jpeg: new Uint8Array([0, 1, 2]) } }));
+  assert.doesNotMatch(pdf, /\/Subtype \/Image/);
+  assert.match(pdf, /VELITE HEALTHCARE/);
 });

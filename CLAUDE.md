@@ -406,7 +406,13 @@ so it carries the company name at the top (tick box in the toolbar).
 - **Trainee experience certificate**: Letters tab → Leaving → *Experience certificate (trainee)* (type `trainee_certificate`: "has undergone training as … from … to …").
   It can be printed at once: if no last working day is recorded, today's date stands in for the end of the training and the preview warns;
   set it first with Edit dates (Last working day) for a fixed date.
-- Not built: company letterhead image in the downloaded PDF, saving a copy in Documents.
+- **Company letterheads (Oct 2026):** Velite Healthcare, Pharmaceuticals, Sciences and India have their pad scanned in `public/letterheads/*.jpg`
+  (1240 px wide ≈ 150 dpi, 50–70 KB each; the printed "DATE : 25-MARCH-2026" on the Sciences scan was blanked out). `lib/letterheads.ts` maps the company name to its
+  picture and holds the top/bottom text margins that keep the letter clear of each design's header and footer (tune `topPt` / `bottomPt` there if a pad is reprinted).
+  **Download PDF** puts the picture behind every page (stored once in the file); the preview shows it as the sheet background; **Print never includes it** (your paper is in the
+  printer). A tick box in the toolbar turns it off, and then the company name is used at the top as before. Others 1 / Others 2 have no letterhead and keep the plain layout.
+  To change a letterhead, replace the JPEG (keep 1240 px wide) and adjust the margins; Velite India's pad is not A4 shaped, so it is placed at the top with its own proportions.
+- Not built: saving a copy of the letter in Documents.
 
 ---
 
