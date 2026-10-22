@@ -78,3 +78,11 @@ test("the upload, the worker and the screen all use the same checks", async () =
   assert.match(await read("app/api/employees/[id]/documents/route.ts"), /scanObject\(objectKey, file\.name, contentType, bytes\)/);
   assert.match(await read("components/employee-record-drawer.tsx"), /Upload a clean copy instead/);
 });
+
+test("the worker keeps scanning batches until nothing is waiting (a backlog clears in one run)", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const worker = await readFile(new URL("../scripts/worker.mjs", import.meta.url), "utf8");
+  assert.match(worker, /const SCAN_TIME_BUDGET_MS = 240_000/);
+  assert.match(worker, /while \(Date\.now\(\) < deadline\)/);
+  assert.match(worker, /if \(!items\.length\) break;/);
+});
