@@ -251,3 +251,4 @@ html,body{font-family:"Segoe UI",system-ui,-apple-system,Roboto,"Helvetica Neue"
 @media screen{.letter-sheet.with-head{background:#fff var(--head-img) 0 0/var(--head-size) no-repeat;padding-top:var(--head-top);padding-bottom:var(--head-bottom)}}
 
 .direct-reports{display:grid;gap:8px}.direct-reports>div{display:flex;flex-direction:column;gap:2px;padding:8px 10px;border:1px solid #e3e8e4;border-radius:8px}.direct-reports span{color:#4d5a53;font-size:14px}
+.record-card-wide{grid-column:1/-1}.record-card-wide .direct-reports{grid-template-columns:repeat(auto-fill,minmax(220px,1fr));padding:12px 16px 16px}
