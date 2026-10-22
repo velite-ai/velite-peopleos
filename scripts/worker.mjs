@@ -570,13 +570,22 @@ async function processBasicScan(item) {
   }
 }
 
+// Keeps taking batches until nothing is waiting, or until about four minutes have passed (a cycle is five minutes),
+// so a large backlog (hundreds of imported documents) clears in one run instead of 12 files every five minutes.
+const SCAN_TIME_BUDGET_MS = 240_000;
 async function scanDocuments() {
   const endpoint = process.env.MALWARE_SCAN_URL;
   if (!storageConfigured()) return { scansSkipped: "storage_not_configured" };
-  const items = await claimScans();
-  if (!items.length) return { scansClaimed: 0 };
-  const results = await mapLimit(items, 3, (item) => (endpoint ? processScan(item, endpoint) : processBasicScan(item)));
-  return { scansClaimed: items.length, ...summarize(results, "scans") };
+  const deadline = Date.now() + SCAN_TIME_BUDGET_MS;
+  let claimed = 0; const totals = {};
+  while (Date.now() < deadline) {
+    const items = await claimScans();
+    if (!items.length) break;
+    claimed += items.length;
+    const results = await mapLimit(items, 3, (item) => (endpoint ? processScan(item, endpoint) : processBasicScan(item)));
+    for (const [key, count] of Object.entries(summarize(results, "scans"))) totals[key] = (totals[key] || 0) + count;
+  }
+  return { scansClaimed: claimed, ...totals };
 }
 
 async function claimDocumentJobs() {

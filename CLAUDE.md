@@ -416,3 +416,6 @@ refuses anything that is not `clean` (HTTP 423), so no document could be opened.
 - **This is not an antivirus.** It cannot see inside compressed PDF streams or detect known malware. If `MALWARE_SCAN_URL` is set
   later (the existing contract: POST `{objectUrl,fileName,contentType}` → `{clean,engine,signature}`), the real scanner is used instead.
 - A false positive stays Blocked; upload a clean copy.
+- The worker takes batches of 12 repeatedly for up to four minutes per cycle (`SCAN_TIME_BUDGET_MS`), so a large backlog clears in one run
+  (428 imported documents were waiting on 22 Oct 2026; a test run cleared 430 in about a second). A file whose object is missing from
+  storage ends in `error` (retried with back-off, then left) and stays "Awaiting check".
