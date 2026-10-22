@@ -1,6 +1,7 @@
 import postgres from "postgres";
 import { createDecipheriv, createHash, createHmac, randomUUID } from "node:crypto";
 import { hostname } from "node:os";
+import { checkDocument } from "../lib/document-checks.mjs";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is required for the worker");
@@ -538,13 +539,43 @@ async function processScan(item, endpoint) {
   }
 }
 
+// No antivirus scanner configured: apply the built-in basic file checks (lib/document-checks.mjs) so documents do not wait for ever.
+async function processBasicScan(item) {
+  try {
+    const response = await fetch(presignObject("GET", item.object_key, 300), { signal: AbortSignal.timeout(requestTimeoutMs) });
+    if (!response.ok) throw new Error(`Storage returned ${response.status}`);
+    const verdict = checkDocument({ bytes: new Uint8Array(await response.arrayBuffer()) });
+    const status = verdict.clean ? "clean" : "infected";
+    const [updated] = await sql`
+      UPDATE documents
+      SET scan_status=${status},scanned_at=now(),
+          scan_details=${JSON.stringify({ engine: verdict.engine, reasons: verdict.reasons, checked: verdict.checked, note: verdict.note, attempt: Number(item.scan_attempts) })}::jsonb,
+          scan_lease_owner=NULL,scan_leased_until=NULL
+      WHERE id=${item.id} AND scan_status='scanning' AND scan_lease_owner=${workerId}
+      RETURNING id
+    `;
+    return updated ? status : "leaseLost";
+  } catch (error) {
+    const terminal = Number(item.scan_attempts) >= maxAttempts;
+    const [updated] = await sql`
+      UPDATE documents
+      SET scan_status='error',scanned_at=now(),
+          scan_details=${JSON.stringify({ error: errorMessage(error), terminal, attempt: Number(item.scan_attempts) })}::jsonb,
+          scan_next_attempt_at=${retryAt(Number(item.scan_attempts))},
+          scan_lease_owner=NULL,scan_leased_until=NULL
+      WHERE id=${item.id} AND scan_status='scanning' AND scan_lease_owner=${workerId}
+      RETURNING id
+    `;
+    return updated ? "failed" : "leaseLost";
+  }
+}
+
 async function scanDocuments() {
   const endpoint = process.env.MALWARE_SCAN_URL;
-  if (!endpoint) return { scansSkipped: "scanner_not_configured" };
   if (!storageConfigured()) return { scansSkipped: "storage_not_configured" };
   const items = await claimScans();
   if (!items.length) return { scansClaimed: 0 };
-  const results = await mapLimit(items, 3, (item) => processScan(item, endpoint));
+  const results = await mapLimit(items, 3, (item) => (endpoint ? processScan(item, endpoint) : processBasicScan(item)));
   return { scansClaimed: items.length, ...summarize(results, "scans") };
 }
 
