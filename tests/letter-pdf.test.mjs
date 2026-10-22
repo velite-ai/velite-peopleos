@@ -7,7 +7,7 @@ const data = {
   type: "offer", company: "Velite Healthcare", reference: "VH/2026-27/05/13/1", date: "2026-05-13", name: "Tisha", title: "Ms.",
   addressLines: ["BXII 886, Shahpura Road", "Ludhiana"], mobile: "7901710703", employeeCode: "84", position: "Executive - F & D", department: "Office",
   joinedDate: "2026-06-01", probationMonths: 6, monthlySalary: 18333, resignationDate: "2026-10-17", lastWorkingDay: "2026-11-10", noticeDays: 24,
-  confirmationDate: "2026-12-01", salaryEffectiveDate: "2027-04-01", employmentEnded: false,
+  confirmationDate: "2026-12-01", salaryEffectiveDate: "2027-04-01", employmentEnded: false, endDateAssumed: false,
 };
 const text = bytes => Array.from(bytes, byte => String.fromCharCode(byte)).join("");
 

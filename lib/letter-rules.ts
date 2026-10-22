@@ -4,17 +4,17 @@
  * The letters are printed on the company's own letterhead, so nothing here draws a letterhead - only blank space at the top.
  */
 
-export type LetterType = "offer" | "appointment" | "confirmation" | "salary_revision" | "employment_verification" | "acceptance" | "relieving" | "experience";
-export const LETTER_TYPES: LetterType[] = ["offer", "appointment", "confirmation", "salary_revision", "employment_verification", "acceptance", "relieving", "experience"];
+export type LetterType = "offer" | "appointment" | "confirmation" | "salary_revision" | "employment_verification" | "acceptance" | "relieving" | "experience" | "trainee_certificate";
+export const LETTER_TYPES: LetterType[] = ["offer", "appointment", "confirmation", "salary_revision", "employment_verification", "acceptance", "relieving", "experience", "trainee_certificate"];
 export const LETTER_LABELS: Record<LetterType, string> = {
   offer: "Offer letter", appointment: "Appointment letter", confirmation: "Confirmation letter", salary_revision: "Salary revision letter",
-  employment_verification: "Employment verification letter", acceptance: "Acceptance of resignation", relieving: "Relieving letter", experience: "Experience letter",
+  employment_verification: "Employment verification letter", acceptance: "Acceptance of resignation", relieving: "Relieving letter", experience: "Experience letter", trainee_certificate: "Experience certificate (trainee)",
 };
 // How the letters are grouped on the Letters tab.
 export const LETTER_GROUPS: { title: string; types: LetterType[] }[] = [
   { title: "Joining", types: ["offer", "appointment"] },
   { title: "During service", types: ["confirmation", "salary_revision", "employment_verification"] },
-  { title: "Leaving", types: ["acceptance", "relieving", "experience"] },
+  { title: "Leaving", types: ["acceptance", "relieving", "experience", "trainee_certificate"] },
 ];
 // These need the last working day (record the resignation first).
 export const NEEDS_LAST_WORKING_DAY: LetterType[] = ["acceptance", "relieving", "experience"];
@@ -40,6 +40,7 @@ export type LetterData = {
   confirmationDate: string | null;
   salaryEffectiveDate: string | null;
   employmentEnded: boolean;
+  endDateAssumed: boolean; // trainee certificate: no end date recorded, so today's date stands in for it
 };
 
 export type LetterContent = {
@@ -233,6 +234,19 @@ export function buildLetter(data: LetterData): LetterContent {
         "We thank you for your services and wish you all the best for your future endeavours.",
       ],
       closing: ["Yours faithfully,"], cc: "cc: Employee file", checklist: null, acceptInline: false, warnings,
+    };
+  }
+
+  if (data.type === "trainee_certificate") {
+    if (data.endDateAssumed) warnings.push("No end date is recorded for this person, so today's date is used as the end of the training. If that is wrong, set it first: Edit dates (Last working day) on the Lifecycle card.");
+    return {
+      ...common, addressee: [], salutation: null, heading: "TO WHOM IT MAY CONCERN", subject: "Experience Certificate",
+      paragraphs: [
+        `This is to certify that ${who} (Employee Code ${data.employeeCode}) has undergone training as ${data.position}${inDept} at ${data.company} from ${longDate(data.joinedDate)} to ${longDate(data.lastWorkingDay)}.`,
+        `During the training period, the conduct and performance of ${who} were found to be satisfactory.`,
+        `We wish ${who} all the best for future endeavours.`,
+      ],
+      closing: ["Yours faithfully,"], cc: null, checklist: null, acceptInline: false, warnings,
     };
   }
 

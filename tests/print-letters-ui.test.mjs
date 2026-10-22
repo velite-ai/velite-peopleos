@@ -35,11 +35,30 @@ test("printing is for HR only, never draws salary for logins that cannot see it,
   const route = await read("app/api/employees/[id]/print-letter/route.ts");
   assert.match(route, /requireApiUser\("people:write"/);
   assert.match(route, /hasPermissionForScope\(user, "payroll:read"/);
-  assert.match(route, /INSERT INTO printed_letters/);
+  assert.match(route, /registerLetter\(/);
+  assert.match(await read("lib/letter-register.ts"), /INSERT INTO printed_letters/);
   assert.match(route, /employee_letter\.print/);
   assert.match(route, /NEEDS_LAST_WORKING_DAY\.includes\(type\)/);
   const migration = await read("database/025_printed_letters.sql");
   assert.match(migration, /UNIQUE \(employee_id, letter_type, letter_date\)/);
   assert.match(migration, /UNIQUE \(business_head_id, letter_date, serial\)/);
   for (const type of ["offer", "appointment", "confirmation", "salary_revision", "employment_verification", "acceptance", "relieving", "experience"]) assert.match(migration, new RegExp(`'${type}'`));
+});
+
+test("offer letters can be printed from the Hiring screen, for a candidate's offer, and trainees have their own certificate", async () => {
+  const hiring = await read("components/operations-workspace.tsx");
+  assert.match(hiring, /Make offer letter/);
+  assert.match(hiring, /<h2>Offer letters<\/h2>/);
+  assert.match(hiring, /\/letters\/print\?type=offer&offer=/);
+  assert.match(hiring, /fetch\("\/api\/recruitment\/offers"/);
+  const route = await read("app/api/recruitment/offers/[id]/print-letter/route.ts");
+  assert.match(route, /requireApiUser\("recruitment:write"/);
+  assert.match(route, /registerLetter\(/);
+  const page = await read("app/letters/print/page.tsx");
+  assert.match(page, /\/api\/recruitment\/offers\/\$\{encodeURIComponent\(offer\)\}\/print-letter/);
+  const migration = await read("database/026_letters_for_offers_and_trainees.sql");
+  assert.match(migration, /offer_id uuid REFERENCES candidate_offers\(id\)/);
+  assert.match(migration, /'trainee_certificate'/);
+  const employeeRoute = await read("app/api/employees/[id]/print-letter/route.ts");
+  assert.match(employeeRoute, /endDateAssumed/);
 });

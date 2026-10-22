@@ -1,9 +1,10 @@
 import { z } from "zod";
 import { apiError, fail, ok, requireApiUser } from "@/lib/api";
 import { hasPermissionForScope } from "@/lib/auth";
-import { db } from "@/lib/database";
+import { db, type Sql } from "@/lib/database";
 import { openJson } from "@/lib/encryption";
-import { LETTER_LABELS, LETTER_TYPES, NEEDS_LAST_WORKING_DAY, type LetterData, probationMonths, referenceNumber, titleFor } from "@/lib/letter-rules";
+import { LETTER_LABELS, LETTER_TYPES, NEEDS_LAST_WORKING_DAY, type LetterData, probationMonths, titleFor } from "@/lib/letter-rules";
+import { registerLetter } from "@/lib/letter-register";
 
 const schema = z.object({ type: z.enum(LETTER_TYPES as [string, ...string[]]) }).strict();
 type PersonalDetails = { gender?: string | null; address?: { line1?: string; line2?: string | null; city?: string; state?: string; postalCode?: string } | null };
@@ -41,26 +42,21 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }
 
     const result = await sql.begin(async tx => {
-      await tx`SELECT pg_advisory_xact_lock(hashtext(${`printed-letters:${employee.business_head_id}`}))`;
-      const [{ today }] = await tx<{ today: string }[]>`SELECT (now() AT TIME ZONE 'Asia/Kolkata')::date::text AS today`;
-      const [existing] = await tx<{ reference_no: string }[]>`SELECT reference_no FROM printed_letters WHERE employee_id=${id} AND letter_type=${type} AND letter_date=${today}::date`;
-      let reference = existing?.reference_no;
-      if (!reference) {
-        const [{ next }] = await tx<{ next: number }[]>`SELECT coalesce(max(serial),0)::int+1 AS next FROM printed_letters WHERE business_head_id=${employee.business_head_id} AND letter_date=${today}::date`;
-        reference = referenceNumber(employee.company, today, next);
-        await tx`INSERT INTO printed_letters (employee_id,business_head_id,letter_type,letter_date,serial,reference_no,printed_by) VALUES (${id},${employee.business_head_id},${type},${today}::date,${next},${reference},${user.id})`;
-      }
-      await tx`INSERT INTO audit_events (actor_user_id,action,entity_type,entity_id,business_head_id,after_data,reason) VALUES (${user.id},'employee_letter.print','employee',${id},${employee.business_head_id},${tx.json({ type, reference })},${`${LETTER_LABELS[type]} opened for printing`})`;
-      return { today, reference };
+      const registered = await registerLetter(tx as unknown as Sql, { owner: { employeeId: id }, businessHeadId: employee.business_head_id, company: employee.company, type, userId: user.id });
+      await tx`INSERT INTO audit_events (actor_user_id,action,entity_type,entity_id,business_head_id,after_data,reason) VALUES (${user.id},'employee_letter.print','employee',${id},${employee.business_head_id},${tx.json({ type, reference: registered.reference })},${`${LETTER_LABELS[type]} opened for printing`})`;
+      return registered;
     });
+    // A trainee certificate can be printed before any end date is recorded: today's date stands in for it, with a warning.
+    const endDateAssumed = type === "trainee_certificate" && !lastWorkingDay;
 
     const letter: LetterData = {
       type, company: employee.company, reference: result.reference, date: result.today,
       name: [employee.first_name, employee.last_name].filter(Boolean).join(" ").replace(/\s+/g, " ").trim().toLowerCase().replace(/(^|[\s.'-])\p{L}/gu, c => c.toUpperCase()),
       title: titleFor(personal?.gender), addressLines, mobile: employee.phone, employeeCode: employee.employee_code, position: employee.position, department: employee.department,
       joinedDate: employee.date_joined, probationMonths: probationMonths(employee.date_joined, employee.probation_end_date), monthlySalary,
-      resignationDate: exit?.submitted_date ?? employee.notice_start_date, lastWorkingDay, noticeDays: exit ? exit.notice_days : null,
+      resignationDate: exit?.submitted_date ?? employee.notice_start_date, lastWorkingDay: endDateAssumed ? result.today : lastWorkingDay, noticeDays: exit ? exit.notice_days : null,
       confirmationDate: employee.confirmation_date ?? employee.probation_end_date, salaryEffectiveDate,
+      endDateAssumed,
       employmentEnded: !["probation", "active", "notice_period"].includes(employee.status) || Boolean(lastWorkingDay && lastWorkingDay < result.today),
     };
     return ok(letter);
