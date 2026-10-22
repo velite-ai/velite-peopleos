@@ -42,10 +42,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const objectKey = `${owner.business_head_id}/${new Date().getUTCFullYear()}/${crypto.randomUUID()}/${safe}`;
     const stored = await fetch(presignObject("PUT", objectKey, 300), { method: "PUT", headers: { "content-type": contentType }, body: bytes });
     if (!stored.ok) return fail("The file could not be saved to storage", 502);
-    const scan = await scanObject(objectKey, file.name, contentType);
+    const scan = await scanObject(objectKey, file.name, contentType, bytes);
     const [document] = await sql.begin(async tx => {
       const rows = await tx`INSERT INTO documents (employee_id,category,file_name,object_key,content_type,size_bytes,expires_on,scan_status,scanned_at,scan_details) VALUES (${id},${category},${file.name.slice(0, 240)},${objectKey},${contentType},${file.size},${expiresOn},${scan.status},${scan.status === "not_configured" ? null : new Date()},${JSON.stringify(scan.details)}::jsonb) RETURNING id,category,file_name,content_type,size_bytes,expires_on,scan_status,created_at`;
-      await tx`INSERT INTO audit_events (actor_user_id,action,entity_type,entity_id,business_head_id,after_data,reason) VALUES (${user.id},'document.upload','document',${rows[0].id},${owner.business_head_id},${JSON.stringify(rows[0])}::jsonb,${scan.status === "clean" ? "Private object upload scanned clean" : "Private object upload quarantined pending a clean scan"})`;
+      await tx`INSERT INTO audit_events (actor_user_id,action,entity_type,entity_id,business_head_id,after_data,reason) VALUES (${user.id},'document.upload','document',${rows[0].id},${owner.business_head_id},${JSON.stringify(rows[0])}::jsonb,${scan.status === "clean" ? "Private object upload passed the file checks" : "Private object upload held back by the file checks"})`;
       return rows;
     });
     return ok(document, { status: 201 });

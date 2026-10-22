@@ -228,7 +228,7 @@ Storage is ready for both as of 26 July.
   business head name, which is more useful in "All Velite" view.
 - New business heads don't get departments automatically.
 - `MALWARE_SCAN_URL` / `MALWARE_SCAN_TOKEN` are read by the code but not
-  configured, so document scanning is inert.
+  configured (no antivirus scanner). Since 22 Oct 2026 files get the built-in basic checks instead — see section 15.
 
 ---
 
@@ -398,3 +398,21 @@ so it carries the company name at the top (tick box in the toolbar).
   Every opening of a letter is in `audit_events` (`employee_letter.print`).
 - The older approval-based letters ("Request letter" on the same tab, worker-made PDF) are unchanged.
 - Not built: offer letter printed from Hiring (candidate offers), company letterhead image in the downloaded PDF, saving a copy in Documents.
+
+---
+
+## 15. Document safety check — 22 Oct 2026
+
+**Problem found:** with no antivirus scanner configured every uploaded document stayed at "Awaiting check" for ever, and the download route
+refuses anything that is not `clean` (HTTP 423), so no document could be opened.
+
+**Fix:** `lib/document-checks.mjs` (plain JS so the app *and* `scripts/worker.mjs` share it). When `MALWARE_SCAN_URL` is not set:
+- at upload (`lib/malware-scan.ts` → `basicChecks`) the file is checked at once; the worker (`processBasicScan`) checks anything still waiting,
+  including files uploaded before this change (first worker cycle after deploy, then every 5 minutes);
+- the checks: really a PDF / JPG / PNG / WebP / Word file; the EICAR antivirus test string; PDFs with `/JavaScript`, `/Launch`,
+  `/EmbeddedFile`, `/RichMedia`, `/XFA`; Word files (.docx) with macros (`vbaProject.bin`), program files inside, or that are another kind of zip;
+  old .doc files with macros (`_VBA_PROJECT`); pictures with `<?php` / `<script`.
+- result is `clean` or `infected` (shown as Checked / Blocked, hover shows the reason); `scan_details.engine = "velite-basic-checks"`.
+- **This is not an antivirus.** It cannot see inside compressed PDF streams or detect known malware. If `MALWARE_SCAN_URL` is set
+  later (the existing contract: POST `{objectUrl,fileName,contentType}` → `{clean,engine,signature}`), the real scanner is used instead.
+- A false positive stays Blocked; upload a clean copy.
