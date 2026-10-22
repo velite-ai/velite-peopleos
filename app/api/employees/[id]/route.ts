@@ -46,8 +46,14 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
       canViewCompensation ? sql`SELECT l.id,i.period_month,i.source_file_name,l.register_type,l.attendance_days,l.monthly_rates,l.earned_dues,l.deductions,l.total_dues,l.total_deductions,l.net_payable FROM salary_register_lines l JOIN salary_register_imports i ON i.id=l.import_id WHERE l.employee_id=${id} ORDER BY i.period_month DESC` : Promise.resolve([]),
     ]);
     const [separation] = canSeeExit ? await sql`SELECT id,separation_type,status,submitted_date::text AS submitted_date,proposed_last_working_date::text AS proposed_last_working_date,approved_last_working_date::text AS approved_last_working_date,notice_days FROM separations WHERE employee_id=${id} AND status IN ('pending','approved') ORDER BY created_at DESC LIMIT 1` : [];
+    // People who report directly to this person, from any company; only those whose own company the viewer is allowed to see.
+    const reportRows = await sql<{ id: string; employee_code: string; name: string; position: string | null; status: string; business_head: string; business_head_id: string; department_id: string | null }[]>`
+      SELECT e.id,e.employee_code,concat_ws(' ',e.first_name,e.last_name) AS name,e.position,e.status,b.name AS business_head,e.business_head_id,e.department_id
+      FROM employees e JOIN business_heads b ON b.id=e.business_head_id
+      WHERE e.reporting_manager_id=${id} AND e.status IN ('probation','active','notice_period') ORDER BY b.name,e.first_name,e.last_name`;
+    const directReports = reportRows.filter(row => hasPermissionForScope(user, "people:read", row.business_head_id, row.department_id)).map(({ business_head_id, department_id, ...row }) => row);
     if (canViewCompensation) await sql`INSERT INTO audit_events (actor_user_id,action,entity_type,entity_id,business_head_id,reason) VALUES (${user.id},'employee.compensation_view','employee',${id},${record.business_head_id},'Authorised compensation and salary-register history viewed')`;
-    return ok({ employee: employee[0], events, compensation, salaryRegisterLines, separation: separation || null, fieldAccess: { compensation: canViewCompensation } });
+    return ok({ employee: employee[0], events, compensation, salaryRegisterLines, separation: separation || null, directReports, fieldAccess: { compensation: canViewCompensation } });
   } catch (error) { return apiError(error); }
 }
 

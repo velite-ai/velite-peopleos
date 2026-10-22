@@ -448,3 +448,5 @@ A reporting manager can work in **any** Velite company (before, only the same co
   Before, both were cleared.
 - Access is unchanged: a manager only sees leave / attendance of their reports when their own login already has access to that company
   (a login limited to one company does not get into another company's data just by being someone's manager; the worker's MANAGER notifications follow the same rule).
+- The Employment tab has a **People who report to this person** card: direct reports from any company (name, code, position, company when different), only people currently working,
+  and only those whose own company the viewer may read (`directReports` in `GET /api/employees/[id]`). To add someone, set the manager in *their* record.
