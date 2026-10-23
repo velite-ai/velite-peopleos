@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { addMonths, csvRow, isPlaceholderDepartment, missingItems } from "../lib/data-cleanup-rules.ts";
+import { addMonths, csvRow, exitDateProblem, isPlaceholderDepartment, isRealExit, missingItems } from "../lib/data-cleanup-rules.ts";
 
 const complete = { departmentName: "Workshop", workEmail: "a@velite.in", phone: "98", hasPhoto: true, hasManager: true, hasSalary: true, documentCount: 3 };
 
@@ -37,4 +37,20 @@ test("CSV rows quote what needs it and defuse spreadsheet formulas", () => {
   assert.equal(csvRow(["a", "b,c", 'say "hi"', null, 5]), 'a,"b,c","say ""hi""",,5');
   assert.equal(csvRow(["=SUM(A1)", "+91 98", "-5", "@x"]), "'=SUM(A1),'+91 98,-5,'@x");
   assert.equal(csvRow(["line\nbreak"]), '"line\nbreak"');
+});
+
+test("a last working day must be given, real, after joining and not in the future", () => {
+  assert.equal(exitDateProblem("2026-10-07", "2026-09-05", "2026-10-23"), null);
+  assert.equal(exitDateProblem("2026-10-23", "2026-10-23", "2026-10-23"), null);
+  assert.match(exitDateProblem("", "2026-09-05", "2026-10-23"), /Enter/);
+  assert.match(exitDateProblem(null, "2026-09-05", "2026-10-23"), /Enter/);
+  assert.match(exitDateProblem("07/10/2026", "2026-09-05", "2026-10-23"), /not valid/);
+  assert.match(exitDateProblem("2026-09-01", "2026-09-05", "2026-10-23"), /before the joining/);
+  assert.match(exitDateProblem("2026-11-01", "2026-09-05", "2026-10-23"), /future/);
+});
+
+test("only real leaving reasons count as exits; duplicates and 'decide later' do not", () => {
+  for (const kind of ["resignation", "termination", "contract_completion", "retirement", "abandonment"]) assert.equal(isRealExit(kind), true, kind);
+  assert.equal(isRealExit("duplicate"), false);
+  assert.equal(isRealExit("skip"), false);
 });

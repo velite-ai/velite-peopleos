@@ -536,3 +536,19 @@ the date they were removed, and whether someone with the same name is still work
 docker exec -i web-t12xccwccugnf8hnjzfabydb sh -c 'cat > /app/q.mjs && node /app/q.mjs' < /opt/velite-deploy/src/scripts/removed-staff.mjs
 ```
 Why it matters: payroll skips `archived` people entirely, so someone who left during the month being paid must be **separated** (with a last working day), not archived, or their final salary is missed.
+
+---
+
+## 23. Recording exits of removed staff — Oct 2026
+
+**More → Data check → 3. Record exits of removed staff** (HR / Super Admin; needs `separation:write`). Lists people with status `archived` who have no exit and are not marked as duplicates, with what is on file
+(last attendance day, days marked this month, date removed, and a same-name person still working). Per person choose: *Resigned* (default), *Dismissed*, *Contract ended*, *Retired*, *Stopped coming*,
+*Duplicate entry (keep removed)* (preselected when the same name is still working) or *Decide later*, and type the **last working day** (never prefilled; must be after joining and not in the future).
+- A **real exit** (`POST /api/data-cleanup/past-exits`) writes a completed `separations` row (type, last working day, no exit-checklist tasks), sets the employee to **`separated`** with `last_working_date`,
+  and writes `employee_events` (`separation`) and `audit_events` (`employee.exit_recorded`). All or nothing.
+- A **duplicate** is only marked (`audit_events` `employee.marked_duplicate` + a history entry) and stays `archived`. The screen warns when a duplicate has a pay record that the working copy lacks.
+- **Why:** payroll skips `archived` people; `separated` people with a last working day in or after the month are still in that month's run (final salary), attendance/leave honour the last working day,
+  attrition counts them, and relieving / experience letters need the last working day.
+- **Staff list change:** `GET /api/employees` now leaves out `separated` as well as `archived` people by default (they used to be counted as staff). New filter `?left=1` lists the people who left;
+  Staff has a **Left the company** tab (next to *Removed staff*). Home / Staff totals count only people still working.
+- For people who left part-way through a month, **mark their attendance for the days they worked** (Attendance screen) before running that month's salary; the exit does not create attendance.

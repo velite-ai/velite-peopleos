@@ -50,3 +50,21 @@ export function csvRow(values: (string | number | null | undefined)[]): string {
     return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
   }).join(",");
 }
+
+// ---- Recording exits of people who were removed from the Staff list ----
+
+export type ExitKind = "resignation" | "termination" | "contract_completion" | "retirement" | "abandonment" | "duplicate" | "skip";
+export const EXIT_KIND_LABELS: Record<ExitKind, string> = {
+  resignation: "Resigned (left on their own)", termination: "Dismissed", contract_completion: "Contract ended", retirement: "Retired", abandonment: "Stopped coming", duplicate: "Duplicate entry (keep removed)", skip: "Decide later",
+};
+export const EXIT_KINDS = Object.keys(EXIT_KIND_LABELS) as ExitKind[];
+export const isRealExit = (kind: ExitKind) => kind !== "duplicate" && kind !== "skip";
+
+// Why a last working day cannot be accepted (null = fine). Dates are YYYY-MM-DD.
+export function exitDateProblem(lastWorkingDay: string | null | undefined, joined: string, today: string): string | null {
+  if (!lastWorkingDay) return "Enter the last working day.";
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(lastWorkingDay)) return "The date is not valid.";
+  if (lastWorkingDay < joined) return "The last working day is before the joining date.";
+  if (lastWorkingDay > today) return "The last working day is in the future. Use Record resignation on the staff record for someone still working.";
+  return null;
+}
