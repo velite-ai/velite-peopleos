@@ -511,3 +511,17 @@ A nightly backup was already set up on the server (not by this repo; the script 
 - **Prove a restore works:** `bash /opt/velite-deploy/src/scripts/backup-restore-test.sh` downloads the newest Velite dump from B2, restores it into a throw-away `postgres:17-alpine` container, prints counts of people,
   documents, attendance days, pay records and audit entries, then removes the container. The live database is never touched. Repeat it after changing the backup setup, and now and then.
 - Not set up: an alert when a night fails (someone has to read the log), and longer retention (only 14 days of history; a monthly copy kept for a year would cost almost nothing at this size).
+
+---
+
+## 21. Adding, renaming and deleting departments — Oct 2026
+
+**Settings → Company setup → Departments** (HR / Super Admin; needs `people:write` for the company). Departments are listed per company with how many people work in each.
+- **Add:** choose the company (fixed when one company is selected in the left menu), type the name. The short code is made from the name (`lib/department-rules.ts`, `QUALITY_ASSURANCE`, `_2` if it clashes).
+  The same name (any case or spacing) in the same company is refused. Adding a name that was deleted earlier **brings the old department back** (same record, so history stays joined up).
+- **Rename:** changes the name everywhere (staff records show the department by reference).
+- **Delete** is a soft delete (`departments.active=false`): the name stays on past records and in the history, but the department disappears from lists and dropdowns (`/api/departments`, Settings, Data check).
+  If people (including former staff) or hiring records / cost centres / job positions / job requisitions are in it, the dialog makes you choose another department of the same company to move them to
+  (or "No department" for people; open job requisitions need a department). Each moved person gets a history entry. **Blocked** while a login is limited to that department, appraisal cycles exist for it, or it has sub-departments.
+- API: `GET/POST /api/organisation/departments`, `PATCH/DELETE /api/organisation/departments/[id]` (DELETE with `{dryRun:true}` previews). Everything is written to `audit_events` (`department.create|rename|delete`).
+- The older "Add department, location or job" form in Settings still works and is unchanged; its Departments list now shows only active departments.
