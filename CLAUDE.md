@@ -476,3 +476,21 @@ nobody marked as on probation although 26 joined in the last six months).
    People whose probation would already be over are left unticked. Applying sets status to Probation and the end date, optionally clears the confirmation date (ticked by default — they are not confirmed yet),
    and writes the same history (`employee_events`) and audit entries as an edit from the record. Only people still Active are changed. Probation status drives the HR-calendar probation reviews; payroll and attendance treat Probation like Active.
 - **Grade is hidden** from the staff record (display, edit form, "record complete" score). The column and API field remain; nothing else was removed.
+
+---
+
+## 19. Two-step sign-in (authenticator code) and server checks — Oct 2026
+
+- The login page shows an **Authenticator code** box only when the account needs one (the server answers `MFA_REQUIRED`), so ordinary logins are unchanged.
+- **Anyone who has set up an authenticator is now asked for its code at sign-in**, whether or not `users.mfa_required` is set (`app/api/auth/login/route.ts`). Setting it up under
+  *Password & security* also flags the account as `mfa_required` (existing behaviour). A login flagged `mfa_required` that never set one up is still refused (unchanged).
+- Codes are 30-second TOTP codes; a code can only be used once. There is no QR code on the setup page: type the shown key into the authenticator app ("enter a setup key").
+- **To enforce it for all privileged logins:** set `REQUIRE_MFA=true` in Coolify (section 6). Until each of them has set up an authenticator they can do nothing but open *Password & security*.
+  Do it in this order: set up your own authenticator → sign in again in a private window with the code → only then set `REQUIRE_MFA=true`.
+- **Recovery (lost phone):** `scripts/reset-mfa.mjs` removes one login's authenticator (and clears its flag) so they can sign in with the password and set up a new one. Logged as `auth.mfa_reset_on_server`.
+  ```bash
+  docker exec -i -e TARGET_EMAIL=person@velite.in web-t12xccwccugnf8hnjzfabydb sh -c 'cat > /app/q.mjs && node /app/q.mjs' < /opt/velite-deploy/src/scripts/reset-mfa.mjs
+  ```
+- `scripts/server-check.sh` is a read-only look at the server (containers, volumes and their size, disk space, existing backups and cron jobs, which settings are set — names only). Used to plan backups:
+  `bash /opt/velite-deploy/src/scripts/server-check.sh`
+- Backups are **not** yet set up by us: check Coolify's database backup setting and the Hetzner snapshots, and keep a separate copy of `DATA_ENCRYPTION_KEY` (without it encrypted data cannot be read).
