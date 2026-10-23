@@ -11,7 +11,7 @@ const rows = await sql`
     EXISTS (SELECT 1 FROM employee_compensation c WHERE c.employee_id=e.id) AS has_pay_record,
     (SELECT count(*)::int FROM documents d WHERE d.employee_id=e.id) AS documents,
     (SELECT max(au.occurred_at)::date::text FROM audit_events au WHERE au.entity_id=e.id::text AND au.action='employee.remove_from_people') AS removed_on,
-    EXISTS (SELECT 1 FROM employees w WHERE w.id<>e.id AND w.status<>'archived' AND lower(regexp_replace(concat_ws(' ', w.first_name, w.last_name), '\\s+', ' ', 'g')) = lower(regexp_replace(concat_ws(' ', e.first_name, e.last_name), '\\s+', ' ', 'g'))) AS same_name_still_working,
+    EXISTS (SELECT 1 FROM employees w WHERE w.id<>e.id AND w.status<>'archived' AND lower(btrim(regexp_replace(concat_ws(' ', w.first_name, w.last_name), '\\s+', ' ', 'g'))) = lower(btrim(regexp_replace(concat_ws(' ', e.first_name, e.last_name), '\\s+', ' ', 'g')))) AS same_name_still_working,
     (SELECT count(*)::int FROM separations s WHERE s.employee_id=e.id) AS exits_recorded
   FROM employees e JOIN business_heads b ON b.id=e.business_head_id
   WHERE e.status='archived' ORDER BY b.name, e.employee_code::text`;

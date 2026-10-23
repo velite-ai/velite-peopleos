@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { csvRow, DEFAULT_PROBATION_MONTHS, FIX_KEYS, FIX_LABELS, type FixKey } from "@/lib/data-cleanup-rules";
+import { csvRow, DEFAULT_PROBATION_MONTHS, exitDateProblem, EXIT_KIND_LABELS, EXIT_KINDS, FIX_KEYS, FIX_LABELS, isRealExit, type ExitKind, type FixKey } from "@/lib/data-cleanup-rules";
 
 type FixPerson = { id: string; code: string; name: string; position: string | null; status: string; joined: string; company: string; department: string | null; missing: FixKey[] };
 type Candidate = { id: string; code: string; name: string; position: string | null; company: string; joined: string; probationEnd: string | null; confirmation: string | null; suggestedEnd: string };
@@ -20,6 +20,7 @@ export function DataCleanupWorkspace({ businessHeadId, head, flash }: { business
     <div className="page-head"><div><span className="eyebrow">Data check</span><h1>Tidy up staff details</h1><p>{head} · Find what is missing from staff records, and fix the probation status of recent joiners.</p></div></div>
     <MissingDetails company={company} head={head} />
     <RecentJoiners company={company} head={head} flash={flash} />
+    <PastExits company={company} head={head} flash={flash} />
   </>;
 }
 
@@ -129,6 +130,75 @@ function RecentJoiners({ company, head, flash }: { company: string; head: string
         <label className="cleanup-check"><input type="checkbox" checked={clearConfirmation} onChange={event => setClearConfirmation(event.target.checked)} /> Clear their confirmation date (they are not confirmed yet; it is set again when they are confirmed)</label>
         <label>Reason for the history<input value={reason} onChange={event => setReason(event.target.value)} /></label>
         <button className="primary" disabled={busy || !chosen.length || reason.trim().length < 3} onClick={apply}>{busy ? "Saving…" : `Put ${chosen.length} on probation`}</button>
+      </div>}
+    </>}
+  </section>;
+}
+
+type Removed = { id: string; code: string; name: string; position: string | null; company: string; joined: string; lastAttendance: string | null; attendanceThisMonth: number; removedOn: string | null; hasPay: boolean | null; documents: number; twin: { id: string; code: string; company: string; hasPay: boolean | null } | null };
+const shortDate = (iso: string | null) => (iso ? new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short" }).format(new Date(`${iso}T00:00:00`)) : "—");
+
+function PastExits({ company, head, flash }: { company: string; head: string; flash: (message: string) => void }) {
+  const [rows, setRows] = useState<Removed[] | null>(null);
+  const [error, setError] = useState("");
+  const [kinds, setKinds] = useState<Record<string, ExitKind>>({});
+  const [days, setDays] = useState<Record<string, string>>({});
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [reload, setReload] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    setRows(null); setError("");
+    fetch(`/api/data-cleanup/past-exits${company ? `?businessHeadId=${company}` : ""}`).then(response => bodyData(response, "The list could not be loaded.")).then((data: Removed[]) => {
+      if (cancelled) return;
+      setRows(data);
+      // Someone with the same name who is still working is most likely a duplicate entry; everyone else most likely resigned.
+      setKinds(Object.fromEntries(data.map(row => [row.id, (row.twin ? "duplicate" : "resignation") as ExitKind])));
+      setDays({});
+    }).catch(problem => { if (!cancelled) setError((problem as Error).message); });
+    return () => { cancelled = true; };
+  }, [company, reload]);
+
+  const items = (rows || []).filter(row => kinds[row.id] && kinds[row.id] !== "skip");
+  const problems = items.filter(row => isRealExit(kinds[row.id])).map(row => ({ row, text: exitDateProblem(days[row.id], row.joined, today()) })).filter(entry => entry.text);
+  const real = items.filter(row => isRealExit(kinds[row.id])).length, dups = items.filter(row => kinds[row.id] === "duplicate").length;
+
+  async function apply() {
+    if (!items.length || problems.length) return;
+    if (!window.confirm(`Record ${real} ${real === 1 ? "exit" : "exits"}${dups ? ` and mark ${dups} ${dups === 1 ? "duplicate" : "duplicates"}` : ""}? People who left move to Staff → Left the company and are included in their last month's salary. This is saved in each person's history.`)) return;
+    setBusy(true); setError("");
+    try {
+      const body = { items: items.map(row => (kinds[row.id] === "duplicate" ? { id: row.id, kind: "duplicate" } : { id: row.id, kind: kinds[row.id], lastWorkingDay: days[row.id] })), note: note.trim() || undefined };
+      const data = await bodyData(await fetch("/api/data-cleanup/past-exits", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }), "The exits could not be saved.");
+      flash(`${data.exits} ${data.exits === 1 ? "exit" : "exits"} recorded${data.duplicates ? `; ${data.duplicates} duplicate(s) marked` : ""}.`);
+      setReload(value => value + 1);
+    } catch (problem) { setError((problem as Error).message); } finally { setBusy(false); }
+  }
+
+  return <section className="panel cleanup-panel">
+    <div className="panel-head padded"><div><h2>3. Record exits of removed staff</h2><p>People who left were removed from the Staff list, so they have no exit on record. A recorded exit counts in attrition, includes them in their last month's salary, and lets you print their relieving and experience letters. {head}</p></div></div>
+    {error && <p className="cleanup-error">{error}</p>}
+    {!rows && !error && <p className="cleanup-empty">Loading…</p>}
+    {rows && <>
+      <div className="cleanup-table">
+        <div className="cleanup-row cleanup-exits cleanup-head"><span>NAME</span><span>WHAT HAPPENED</span><span>LAST WORKING DAY</span></div>
+        {rows.map(row => {
+          const kind = kinds[row.id] || "skip"; const problem = isRealExit(kind) && days[row.id] ? exitDateProblem(days[row.id], row.joined, today()) : null;
+          return <div className="cleanup-row cleanup-exits" key={row.id}>
+            <span><b>{row.name}</b><small>{[`Code ${row.code}`, row.position, row.company].filter(Boolean).join(" · ")}</small>
+              <small>{[row.lastAttendance ? `Last attendance ${shortDate(row.lastAttendance)}${row.attendanceThisMonth ? ` (${row.attendanceThisMonth} day${row.attendanceThisMonth === 1 ? "" : "s"} marked this month)` : ""}` : "No attendance on file", row.removedOn ? `removed ${shortDate(row.removedOn)}` : ""].filter(Boolean).join(" · ")}</small>
+              {row.twin && <small className="cleanup-twin">Same name is still working: code {row.twin.code}, {row.twin.company}.{row.hasPay && row.twin.hasPay === false ? " This copy has a pay record that the working one does not." : ""}</small>}</span>
+            <span><select value={kind} onChange={event => setKinds(current => ({ ...current, [row.id]: event.target.value as ExitKind }))} aria-label={`What happened to ${row.name}`}>{EXIT_KINDS.map(value => <option key={value} value={value}>{EXIT_KIND_LABELS[value]}</option>)}</select></span>
+            <span>{isRealExit(kind) ? <><input type="date" value={days[row.id] || ""} min={row.joined} max={today()} onChange={event => setDays(current => ({ ...current, [row.id]: event.target.value }))} aria-label={`Last working day of ${row.name}`} />{problem && <small className="cleanup-bad">{problem}</small>}</> : <small>{kind === "duplicate" ? "Stays removed" : "Not changed"}</small>}</span>
+          </div>;
+        })}
+        {!rows.length && <p className="cleanup-empty">Nobody is waiting. Everyone removed already has an exit recorded or is marked as a duplicate.</p>}
+      </div>
+      {rows.length > 0 && <div className="cleanup-apply">
+        <label>Note for the history (optional)<input value={note} onChange={event => setNote(event.target.value)} maxLength={300} placeholder="For example: exits entered from the October muster" /></label>
+        {problems.length > 0 && <p className="cleanup-bad">{problems.length} last working {problems.length === 1 ? "day is" : "days are"} missing or not valid.</p>}
+        <button className="primary" disabled={busy || !items.length || problems.length > 0} onClick={apply}>{busy ? "Saving…" : `Record ${real} ${real === 1 ? "exit" : "exits"}${dups ? ` · mark ${dups} duplicate${dups === 1 ? "" : "s"}` : ""}`}</button>
       </div>}
     </>}
   </section>;
