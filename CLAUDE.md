@@ -494,3 +494,20 @@ nobody marked as on probation although 26 joined in the last six months).
 - `scripts/server-check.sh` is a read-only look at the server (containers, volumes and their size, disk space, existing backups and cron jobs, which settings are set — names only). Used to plan backups:
   `bash /opt/velite-deploy/src/scripts/server-check.sh`
 - Backups are **not** yet set up by us: check Coolify's database backup setting and the Hetzner snapshots, and keep a separate copy of `DATA_ENCRYPTION_KEY` (without it encrypted data cannot be read).
+
+---
+
+## 20. Backups — found on the server 23 Oct 2026
+
+A nightly backup was already set up on the server (not by this repo; the script lives only on the server). What it does, from `/usr/local/bin/pg-backup.sh` and `/var/log/pg-backup.log`:
+- **cron, 02:00 every day**, log in `/var/log/pg-backup.log` (`tail -15 /var/log/pg-backup.log` shows the last runs; each night should say `OK postgres-t12xcc…`).
+- Dumps every Postgres container with `pg_dumpall` (the Velite database `postgres-t12xcc…`, a different app `bom-postgres`, and Coolify's own `coolify-db`), gzips them and uploads them with **rclone to Backblaze B2**
+  (`b2:velite/pg-backups`). Copies older than 14 days are deleted locally (`/var/backups/pg`) and in B2. The line `SKIP/FAIL coolify` is normal (the Coolify app container has no database).
+- **MinIO (documents and photos)** is mirrored nightly with `rclone sync` to `b2:velite/minio-data`. It is a mirror, so a file deleted in the app is also removed from the mirror; the history depends on the
+  B2 bucket keeping old versions (check the bucket's lifecycle setting in the Backblaze console).
+- Last runs on 21, 22 and 23 Oct 2026 all succeeded (Velite database dump 1.4–2.0 MB, MinIO 172–192 MB). Coolify's own backup folder (`/data/coolify/backups`) is empty (Coolify backups are not used).
+- **Not in any backup:** `DATA_ENCRYPTION_KEY` and `AUTH_SECRET` (they live in the Coolify compose file). Keep a separate copy of the encryption key; without it the encrypted columns cannot be read from a restored database.
+- A manual backup before a risky step (e.g. locking a salary month): `/usr/local/bin/pg-backup.sh`.
+- **Prove a restore works:** `bash /opt/velite-deploy/src/scripts/backup-restore-test.sh` downloads the newest Velite dump from B2, restores it into a throw-away `postgres:17-alpine` container, prints counts of people,
+  documents, attendance days, pay records and audit entries, then removes the container. The live database is never touched. Repeat it after changing the backup setup, and now and then.
+- Not set up: an alert when a night fails (someone has to read the log), and longer retention (only 14 days of history; a monthly copy kept for a year would cost almost nothing at this size).
