@@ -462,3 +462,17 @@ duplicate codes, attendance coverage, leave, pay on file, documents, hiring, exi
 ```bash
 docker exec -i web-t12xccwccugnf8hnjzfabydb sh -c 'cat > /app/q.mjs && node /app/q.mjs' < /opt/velite-deploy/src/scripts/data-health.mjs
 ```
+
+---
+
+## 18. Data check screen — Oct 2026
+
+**More → Data check** (HR / Super Admin). Built from the first data-health report (79 people working; 52% in "Misc." or no department, 72% without a work email,
+nobody marked as on probation although 26 joined in the last six months).
+1. **Details missing from staff records** (`GET /api/data-cleanup/fix-list`): for people currently working, lists what is missing — department (empty or "Misc."), work email, phone, photo,
+   reporting manager, salary record (only checked if the login can see pay) and documents. Filter chips per gap; **Download for Excel** gives a CSV (with BOM, formulas defused) of the current filter.
+   Rules and CSV helpers are in `lib/data-cleanup-rules.ts` (unit tested).
+2. **Put recent joiners on probation** (`/api/data-cleanup/probation`): Active people who joined in the last N months (default 6) with a suggested probation end (joining date + 6 months, editable per person).
+   People whose probation would already be over are left unticked. Applying sets status to Probation and the end date, optionally clears the confirmation date (ticked by default — they are not confirmed yet),
+   and writes the same history (`employee_events`) and audit entries as an edit from the record. Only people still Active are changed. Probation status drives the HR-calendar probation reviews; payroll and attendance treat Probation like Active.
+- **Grade is hidden** from the staff record (display, edit form, "record complete" score). The column and API field remain; nothing else was removed.

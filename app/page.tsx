@@ -12,9 +12,10 @@ import { PayrollWorkspace } from "@/components/payroll-workspace";
 import { AdministrationWorkspace } from "@/components/administration-workspace";
 import { EngagementWorkspace } from "@/components/engagement-workspace";
 import { DiwaliGiftsWorkspace } from "@/components/diwali-gifts-workspace";
+import { DataCleanupWorkspace } from "@/components/data-cleanup-workspace";
 import { GRACE_MINUTES, WORK_END_MINUTES, WORK_START_MINUTES, earlyMinutes, formatClock, isTimeStatus, istMinutes, lateMinutes, parseClock } from "@/lib/attendance-time-rules";
 
-type Module = "Overview" | "My Workspace" | "People" | "Recruitment" | "Onboarding" | "Daily Attendance" | "Leave & Shifts" | "Payroll" | "Performance" | "Engagement" | "HR Calendar" | "Learning" | "Helpdesk" | "Separation" | "Reports" | "Administration" | "Diwali Gifts";
+type Module = "Overview" | "My Workspace" | "People" | "Recruitment" | "Onboarding" | "Daily Attendance" | "Leave & Shifts" | "Payroll" | "Performance" | "Engagement" | "HR Calendar" | "Learning" | "Helpdesk" | "Separation" | "Reports" | "Administration" | "Diwali Gifts" | "Data Check";
 
 type BusinessHead = { id: string; code: string; name: string };
 
@@ -25,20 +26,20 @@ const LABEL: Record<Module, string> = {
   "Onboarding": "Joining", "Daily Attendance": "Attendance", "Leave & Shifts": "Leave & shifts",
   "Payroll": "Salary", "Performance": "Appraisals", "Engagement": "Surveys & recognition",
   "HR Calendar": "Calendar", "Learning": "Training", "Helpdesk": "Help desk", "Separation": "Leaving",
-  "Reports": "Reports", "Administration": "Settings", "Diwali Gifts": "Diwali gifts",
+  "Reports": "Reports", "Administration": "Settings", "Diwali Gifts": "Diwali gifts", "Data Check": "Data check",
 };
 const ICON: Record<Module, IconName> = {
   "Overview": "home", "My Workspace": "user", "People": "users", "Recruitment": "userPlus",
   "Onboarding": "doorIn", "Daily Attendance": "check", "Leave & Shifts": "sun",
   "Payroll": "rupee", "Performance": "star", "Engagement": "heart", "HR Calendar": "calendar",
-  "Learning": "book", "Helpdesk": "help", "Separation": "doorOut", "Reports": "chart", "Administration": "settings", "Diwali Gifts": "gift",
+  "Learning": "book", "Helpdesk": "help", "Separation": "doorOut", "Reports": "chart", "Administration": "settings", "Diwali Gifts": "gift", "Data Check": "alert",
 };
 /* Everyday work is always visible; the rest sits under "More". */
 const nav: { group: string; more?: boolean; items: Module[] }[] = [
   { group: "", items: ["Overview", "People", "Daily Attendance", "Leave & Shifts", "Payroll", "Reports"] },
   { group: "Joining & leaving", more: true, items: ["Recruitment", "Onboarding", "Separation"] },
   { group: "Growth & support", more: true, items: ["Performance", "Learning", "Engagement", "HR Calendar", "Helpdesk"] },
-  { group: "Your account", more: true, items: ["My Workspace", "Administration", "Diwali Gifts"] },
+  { group: "Your account", more: true, items: ["My Workspace", "Data Check", "Administration", "Diwali Gifts"] },
 ];
 
 type IconName = "home"|"user"|"users"|"userPlus"|"doorIn"|"doorOut"|"check"|"sun"|"rupee"|"star"|"heart"|"calendar"|"book"|"help"|"chart"|"settings"|"shield"|"logout"|"chevron"|"search"|"bell"|"plus"|"alert"|"gift";
@@ -200,7 +201,7 @@ export default function Home() {
           const badge=(item:Module)=>item==='Helpdesk'?counts.openHelpdesk:item==='Leave & Shifts'?counts.pendingLeave:null;
           const button=(item:Module)=>{const count=badge(item);return <button className={active === item ? "active" : ""} onClick={() => {setActive(item);if(item==='People')setPeopleFilter('all');setShowMobileNav(false)}} key={item}><Icon name={ICON[item]} />{LABEL[item]}{count?<b title={`${count} waiting`}>{count}</b>:null}</button>};
           if(employeeOnly) return <div className="nav-group">{button('My Workspace')}</div>;
-  const visible=(section:typeof nav[number])=>section.items.filter(item=>(item!=='Administration'||canAdmin)&&(item!=='Diwali Gifts'||isSuperAdmin));
+  const visible=(section:typeof nav[number])=>section.items.filter(item=>(item!=='Administration'||canAdmin)&&(item!=='Data Check'||canAdmin)&&(item!=='Diwali Gifts'||isSuperAdmin));
           const moreOpen=showMore||nav.some(section=>section.more&&section.items.includes(active));
           return <>{nav.filter(section=>!section.more).map(section=><div className="nav-group" key="main">{visible(section).map(button)}</div>)}
             <button className="nav-more" onClick={()=>setShowMore(value=>!value)} aria-expanded={moreOpen}><span style={{transform:moreOpen?'rotate(180deg)':'none',display:'inline-flex'}}><Icon name="chevron" size={16} /></span>{moreOpen?'Less':'More'}</button>
@@ -228,6 +229,7 @@ export default function Home() {
            active === "Engagement" ? <EngagementWorkspace businessHeadId={head} head={headName} heads={heads} people={people} flash={flash} /> :
            active === "HR Calendar" ? <HrCalendarWorkspace businessHeadId={head} head={headName} flash={flash} /> :
            active === "Diwali Gifts" ? (isSuperAdmin ? <DiwaliGiftsWorkspace flash={flash} /> : <section className="panel loading-panel">This page is not available.</section>) :
+           active === "Data Check" ? (canAdmin ? <DataCleanupWorkspace businessHeadId={head} head={headName} flash={flash} /> : <section className="panel loading-panel">This page is not available.</section>) :
            active === "Administration" ? <AdministrationWorkspace businessHeadId={head} head={headName} heads={heads} flash={flash} /> :
            <OperationsWorkspace active={active} businessHeadId={head} head={headName} heads={heads} people={people} flash={flash} />}
         </div>
