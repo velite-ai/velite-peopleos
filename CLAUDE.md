@@ -525,3 +525,14 @@ A nightly backup was already set up on the server (not by this repo; the script 
   (or "No department" for people; open job requisitions need a department). Each moved person gets a history entry. **Blocked** while a login is limited to that department, appraisal cycles exist for it, or it has sub-departments.
 - API: `GET/POST /api/organisation/departments`, `PATCH/DELETE /api/organisation/departments/[id]` (DELETE with `{dryRun:true}` previews). Everything is written to `audit_events` (`department.create|rename|delete`).
 - The older "Add department, location or job" form in Settings still works and is unchanged; its Departments list now shows only active departments.
+
+---
+
+## 22. Removed people report — Oct 2026
+
+`scripts/removed-staff.mjs` is a read-only list of people removed from the Staff list (status `archived`) with what is on file for each: last attendance day, attendance this month, pay record, documents,
+the date they were removed, and whether someone with the same name is still working (probable duplicate entry). Used to plan recording real exits. Run it after `update-from-github.sh` (no rebuild):
+```bash
+docker exec -i web-t12xccwccugnf8hnjzfabydb sh -c 'cat > /app/q.mjs && node /app/q.mjs' < /opt/velite-deploy/src/scripts/removed-staff.mjs
+```
+Why it matters: payroll skips `archived` people entirely, so someone who left during the month being paid must be **separated** (with a last working day), not archived, or their final salary is missed.
