@@ -552,3 +552,15 @@ Why it matters: payroll skips `archived` people entirely, so someone who left du
 - **Staff list change:** `GET /api/employees` now leaves out `separated` as well as `archived` people by default (they used to be counted as staff). New filter `?left=1` lists the people who left;
   Staff has a **Left the company** tab (next to *Removed staff*). Home / Staff totals count only people still working.
 - For people who left part-way through a month, **mark their attendance for the days they worked** (Attendance screen) before running that month's salary; the exit does not create attendance.
+
+---
+
+## 24. Finishing an exit from the staff record — Oct 2026
+
+Before, an exit started with **Record resignation** (status `notice_period`, five exit steps created) could never be finished from the app: completing it needs every step ticked and nothing in the UI ticked them.
+Now the **exit card** on the Employment tab of the record (HR login with `separation:write`) shows the steps as tick boxes ("3 of 5 exit steps done") and a **Finish exit** button.
+- Ticking calls `POST /api/separations/tasks/[id]` (complete / reopen); `GET /api/employees/[id]` returns `separation.tasks`.
+- **Finish exit** (`POST /api/separations/[id]/finish`) approves the exit if it was still waiting, requires every step ticked and the **last working day to be today or earlier**, then completes it:
+  status `separated` with the last working day, `employee_events` (`separation`) and `audit_events` (`separation.complete`). The person moves to **Staff → Left the company**.
+- The older route (Leaving screen: approve, then complete) still exists and does the same in two clicks.
+- The steps are: final settlement, no-dues and assets, knowledge transfer, exit interview and letters, revoke accounts. Ticking them is the HR user's own confirmation; nothing is checked automatically.

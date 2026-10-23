@@ -205,8 +205,7 @@ export function EmployeeRecordDrawer({ person, people, heads = [], canChangeComp
             <RecordCard title="Lifecycle dates" subtitle="Drives reminders in the HR calendar" action="Edit dates" onAction={() => setForm("lifecycle")}><DefinitionGrid values={[
               ["Date joined", dateOnly(employee.date_joined)], ["Probation end", dateOnly(employee.probation_end_date)], ["Confirmation", dateOnly(employee.confirmation_date)], ["Next salary revision", dateOnly(employee.next_salary_revision_date)], ["Notice started", dateOnly(employee.notice_start_date)], ["Last working day", dateOnly(employee.last_working_date)],
             ]} />
-              {separation ? <div className="exit-note"><b>{friendly(separation.separation_type)} {separation.status === "approved" ? "approved" : "recorded"}</b><span>Submitted {dateOnly(separation.submitted_date)} · last working day {dateOnly(separation.approved_last_working_date || separation.proposed_last_working_date)}. Approve it and tick off the exit steps under More › Leaving.</span></div>
-                : ["probation", "active"].includes(employee.status) ? <div className="exit-note"><span>Resignation received? Record it here to start the notice period and the exit steps.</span><button type="button" onClick={() => setForm("resignation")}>Record resignation</button></div> : null}
+              {separation ? <ExitCard separation={separation} employeeName={employee.first_name} flash={flash} />                 : ["probation", "active"].includes(employee.status) ? <div className="exit-note"><span>Resignation received? Record it here to start the notice period and the exit steps.</span><button type="button" onClick={() => setForm("resignation")}>Record resignation</button></div> : null}
             </RecordCard>
             <RecordCard wide title="People who report to this person" subtitle={record?.directReports?.length ? `${record.directReports.length} ${record.directReports.length === 1 ? "person reports" : "people report"} directly to ${employee.first_name}. Reporting lines can cross companies.` : "Direct reports, from any company"}>{record?.directReports?.length ? <div className="direct-reports">{record.directReports.map((item: any) => <div key={item.id}><b>{item.name}</b><span>{[item.employee_code, item.position, item.business_head !== employee.business_head ? item.business_head : null].filter(Boolean).join(" · ")}</span></div>)}</div> : <Unavailable text="No one reports to this person yet. Set it in the other person's record: Edit employment → Reporting manager." />}</RecordCard>
             <RecordCard title="Work contact"><DefinitionGrid values={[["Work email", employee.work_email], ["Work phone", employee.phone], ["Record created", dateOnly(employee.created_at)], ["Last updated", dateOnly(employee.updated_at)]]} /></RecordCard>
@@ -305,6 +304,48 @@ function ChangeCompanyModal({ employeeId, name, current, currentId, heads, onClo
       <div className="modal-actions span-two"><button type="button" className="secondary" onClick={onClose}>Cancel</button><button className="primary" disabled={busy || !preview?.canMove || reason.trim().length < 5} onClick={submit}>{busy ? "Moving…" : `Move to ${options.find(head => head.id === target)?.name || "…"}`}</button></div>
     </div>
   </section></div>;
+}
+
+// The exit in progress: tick off the exit steps, then finish the exit, which moves the person to "Left the company".
+function ExitCard({ separation, employeeName, flash }: { separation: any; employeeName: string; flash: (message: string) => void }) {
+  const [busy, setBusy] = useState(false); const [error, setError] = useState("");
+  // The steps are kept here so a tick shows at once, without reloading the whole record.
+  const [tasks, setTasks] = useState<any[]>(separation.tasks || []);
+  useEffect(() => { setTasks(separation.tasks || []); }, [separation.id, separation.tasks]);
+  const done = tasks.filter(task => task.status === "completed").length;
+  const lastDay = String(separation.approved_last_working_date || separation.proposed_last_working_date).slice(0, 10);
+  const today = new Date().toISOString().slice(0, 10);
+  const ready = done === tasks.length && lastDay <= today;
+  async function call(path: string, body: unknown) {
+    const response = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    const data = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(data?.error?.message || "That could not be saved.");
+  }
+  async function tick(task: any) {
+    const completing = task.status !== "completed";
+    setBusy(true); setError("");
+    setTasks(current => current.map(item => item.id === task.id ? { ...item, status: completing ? "completed" : "pending" } : item));
+    try { await call(`/api/separations/tasks/${task.id}`, { action: completing ? "complete" : "reopen", reason: completing ? "Exit step done" : "Exit step reopened" }); }
+    catch (problem) { setTasks(current => current.map(item => item.id === task.id ? { ...item, status: task.status } : item)); setError((problem as Error).message); }
+    finally { setBusy(false); }
+  }
+  async function finish() {
+    if (!window.confirm(`Finish the exit? ${employeeName} will move to Left the company, with ${lastDay} as the last working day. This is saved in the history.`)) return;
+    setBusy(true); setError("");
+    try { await call(`/api/separations/${separation.id}/finish`, { reason: "All exit steps completed" }); flash(`${employeeName}'s exit is finished.`); window.location.reload(); }
+    catch (problem) { setError((problem as Error).message); setBusy(false); }
+  }
+  return <div className="exit-note exit-steps">
+    <b>{friendly(separation.separation_type)} {separation.status === "approved" ? "approved" : "recorded"}</b>
+    <span>Submitted {dateOnly(separation.submitted_date)} · last working day {dateOnly(lastDay)}.</span>
+    {tasks.length > 0 && <>
+      <div className="exit-progress">{done} of {tasks.length} exit steps done</div>
+      <div className="exit-task-list">{tasks.map(task => <label key={task.id} className={task.status === "completed" ? "exit-done" : ""}><input type="checkbox" checked={task.status === "completed"} disabled={busy} onChange={() => tick(task)} /> {task.title}</label>)}</div>
+    </>}
+    {error && <div className="form-error">{error}</div>}
+    <button type="button" className="exit-finish" disabled={busy || !ready} onClick={finish}>Finish exit</button>
+    {!ready && <span className="exit-hint">{lastDay > today ? `Available on ${dateOnly(lastDay)}, the last working day.` : "Tick every exit step to finish the exit."}</span>}
+  </div>;
 }
 
 function RecordCard({ title, subtitle, action, danger, wide, onAction, children }: { wide?: boolean; title: string; subtitle?: string; action?: string; danger?: boolean; onAction?: () => void; children: React.ReactNode }) {
