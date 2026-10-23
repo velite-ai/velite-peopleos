@@ -450,3 +450,15 @@ A reporting manager can work in **any** Velite company (before, only the same co
   (a login limited to one company does not get into another company's data just by being someone's manager; the worker's MANAGER notifications follow the same rule).
 - The Employment tab has a **People who report to this person** card: direct reports from any company (name, code, position, company when different), only people currently working,
   and only those whose own company the viewer may read (`directReports` in `GET /api/employees/[id]`). To add someone, set the manager in *their* record.
+
+---
+
+## 17. Data health report — Oct 2026
+
+`scripts/data-health.mjs` prints a read-only summary of the live data (counts only, no names or individual salaries): staff by company, gaps in records, odd dates,
+duplicate codes, attendance coverage, leave, pay on file, documents, hiring, exits, which parts of the app hold data, and who used the app. Nothing is changed
+(the connection is read-only). After `update-from-github.sh` has pulled the repo, run it in the Coolify terminal (no rebuild needed):
+
+```bash
+docker exec -i web-t12xccwccugnf8hnjzfabydb sh -c 'cat > /app/q.mjs && node /app/q.mjs' < /opt/velite-deploy/src/scripts/data-health.mjs
+```
