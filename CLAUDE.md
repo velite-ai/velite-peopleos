@@ -564,3 +564,12 @@ Now the **exit card** on the Employment tab of the record (HR login with `separa
   status `separated` with the last working day, `employee_events` (`separation`) and `audit_events` (`separation.complete`). The person moves to **Staff → Left the company**.
 - The older route (Leaving screen: approve, then complete) still exists and does the same in two clicks.
 - The steps are: final settlement, no-dues and assets, knowledge transfer, exit interview and letters, revoke accounts. Ticking them is the HR user's own confirmation; nothing is checked automatically.
+
+---
+
+## 25. Who is absent / on leave, by name — Oct 2026
+
+- **Home** and **Attendance** show a **Who is away** panel with the names of people marked *Absent*, *On leave* (with Paid / Unpaid leave) and *Half day* for the day (`AwayToday` in `app/page.tsx`).
+- **Attendance** has filter chips (Everyone, Present, Absent, On leave, Not marked, Off / holiday) with counts; the day sheet can be narrowed to one of them.
+- People who were **not employed that day** (left on or before the day before, or joining later) are no longer counted or listed: "Present today … of 95 staff" used to include everyone who had left. They still show,
+  marked "Not employed on this day", if searched by name on the Attendance sheet. The API (`GET /api/attendance`) is unchanged; the screens filter on status `not_employed`.
