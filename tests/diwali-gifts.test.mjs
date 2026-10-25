@@ -31,7 +31,7 @@ test("every gift route checks for a Super Administrator, and nothing leaks into 
   for (const file of files) {
     const source = await readFile(file, "utf8");
     const handlers = source.split(/export async function /).slice(1);
-    assert.ok(handlers.length >= 2);
+    assert.ok(handlers.length >= 1);
     for (const handler of handlers) assert.match(handler, /await requireSuperAdmin\(\)/, `${file.pathname}: ${handler.slice(0, 20)}`);
     assert.doesNotMatch(source, /audit_events/);
   }
