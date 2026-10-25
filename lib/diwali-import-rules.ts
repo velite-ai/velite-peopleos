@@ -3,6 +3,7 @@
  * No imports, so they can be unit tested on their own and used by the API and the screen.
  *
  * Sheet layout (the same on the Workers and Office tabs): B name, C village, G gift given, H cash paid, L next year's planned cash.
+ * It works whether the copy starts at column A or at column B.
  * Everything else (older columns, bonus / leave-with-wages) is ignored on purpose.
  */
 
@@ -22,20 +23,21 @@ const amount = (value: string | undefined) => { const n = Number(String(value ??
 
 // Reads text copied from the sheet (tab separated). Rows without a name, the heading row and the total row are skipped.
 export function parseSheet(text: string): SheetRow[] {
+  const lines = text.split(/\r?\n/).map(line => line.split("\t").map(cell => squash(cell.replace(/^"|"$/g, ""))));
+  // Copied from column A (SR. NO. first) the name is the second cell; copied from column B it is the first.
+  const shift = lines.some(cells => /^sr\.?\s*no/i.test(cells[0] || "") || /^name$/i.test(cells[1] || "")) ? 1 : 0;
   const rows: SheetRow[] = [];
-  for (const line of text.split(/\r?\n/)) {
-    const cells = line.split("\t").map(cell => squash(cell.replace(/^"|"$/g, "")));
-    const rawName = cells[1] || "";
-    if (!rawName || /^name$/i.test(rawName)) continue;
+  for (const cells of lines) {
+    const rawName = cells[shift] || "";
+    if (!rawName || /^name$/i.test(rawName) || /^\d+$/.test(rawName)) continue;
     const notes: string[] = [];
-    const tags = [...rawName.matchAll(/\(([^)]*)\)/g)].map(match => match[1]);
-    if (tags.length) notes.push(`Written in the sheet as “${rawName}”`);
+    if (/\([^)]*\)/.test(rawName)) notes.push(`Written in the sheet as “${rawName}”`);
     const name = squash(rawName.replace(/\([^)]*\)/g, " "));
-    const gift = cells[6] || "";
-    const cash = amount(cells[7]);
-    const nextCash = amount(cells[11]);
+    const gift = cells[5 + shift] || "";
+    const cash = amount(cells[6 + shift]);
+    const nextCash = amount(cells[10 + shift]);
     if (!gift && !cash && !nextCash) continue;
-    rows.push({ name, place: cells[2] || "", gift, cash, nextCash, note: notes.join(". ") });
+    rows.push({ name, place: cells[1 + shift] || "", gift, cash, nextCash, note: notes.join(". ") });
   }
   return rows;
 }
