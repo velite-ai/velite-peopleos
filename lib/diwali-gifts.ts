@@ -59,3 +59,28 @@ export async function resolveRecipient(input: { recipientType: "staff" | "other"
   if (!employee) return { error: fail("Staff member not found", 422) };
   return { value: { recipientType: "staff" as const, employeeId: input.employeeId, recipientName: employee.name, company: employee.company } };
 }
+
+type NewGift = { year: number; status: "planned" | "bought" | "handed_over"; details: GiftDetails };
+
+// Adds gifts in one go (all or nothing) with the same change log as adding them one by one.
+export async function insertGifts(userId: string, gifts: NewGift[]) {
+  if (!gifts.length) return 0;
+  await db().begin(async tx => {
+    for (const gift of gifts) {
+      const [row] = await tx<{ id: string }[]>`INSERT INTO diwali_gifts (gift_year,status,details_encrypted,created_by,updated_by) VALUES (${gift.year},${gift.status},${sealGift(gift.details)},${userId},${userId}) RETURNING id`;
+      await tx`INSERT INTO diwali_gift_events (gift_id,action,actor_user_id) VALUES (${row.id},'create',${userId})`;
+    }
+  });
+  return gifts.length;
+}
+
+export type PersonRow = { id: string; name: string; status: string; company: string };
+// Everyone ever on the Staff list, with their current status (people who left are included so they can be recognised).
+export async function allPeople() {
+  return db()<PersonRow[]>`SELECT e.id,concat_ws(' ',e.first_name,e.last_name) AS name,e.status,b.name AS company FROM employees e JOIN business_heads b ON b.id=e.business_head_id`;
+}
+
+export async function giftsOfYear(year: number) {
+  const rows = await db()<GiftRow[]>`SELECT id,gift_year,status,details_encrypted,updated_at FROM diwali_gifts WHERE gift_year=${year} AND deleted_at IS NULL ORDER BY created_at`;
+  return rows.map(toGift);
+}
