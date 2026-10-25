@@ -599,8 +599,8 @@ Staff record → **Pay, PF & bank** → **Compensation history**: every entry ha
 ## 28. Loading earlier Diwali years and planning the next — Oct 2026
 
 **More → Diwali gifts** (Super Admin only, as in section 12) gained two buttons:
-- **Load an earlier year**: paste a tab of the Google Sheet (Ctrl+A, Ctrl+C). Only column G (gift given), H (cash paid) and L (next year's planned cash) are read; older-year columns and Bonus/LWW are ignored (`lib/diwali-import-rules.ts`, unit tested).
-  One register row per person: item = gift text + "Cash", value = the cash (the sheet has no price for gift items); status Handed over; column L becomes a Planned "Cash" row for the following year.
+- **Load an earlier year**: paste a tab of the Google Sheet (Ctrl+A, Ctrl+C). Only column G (gift given), H (cash paid), L (next year's planned cash) and M (next year's planned gift, e.g. Blanket) are read; older-year columns and Bonus/LWW are ignored (`lib/diwali-import-rules.ts`, unit tested).
+  One register row per person: item = gift text + "Cash", value = the cash (the sheet has no price for gift items); status Handed over; columns L / M become a Planned row for the following year ("Blanket + Cash"; a planned gift with no cash is kept at ₹0, a 0 with no gift is skipped).
   **Check first** (dry run) shows counts, who has since left, and name matches that need checking; **Add to register** inserts everything in one transaction through the normal sealing and `diwali_gift_events`.
   Running it again skips rows already there (same name, gift, amount). API: `POST /api/diwali-gifts/import`.
 - **Plan next year from this year**: copies last year's gifts as Planned, skipping people with status `separated` / `archived`, and anyone already planned. API: `POST /api/diwali-gifts/plan`.

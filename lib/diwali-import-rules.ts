@@ -2,12 +2,12 @@
  * Rules for loading an earlier year's Diwali sheet into the gift register, and for planning the next year from it.
  * No imports, so they can be unit tested on their own and used by the API and the screen.
  *
- * Sheet layout (the same on the Workers and Office tabs): B name, C village, G gift given, H cash paid, L next year's planned cash.
+ * Sheet layout (the same on the Workers and Office tabs): B name, C village, G gift given, H cash paid, L next year's planned cash, M next year's planned gift.
  * It works whether the copy starts at column A or at column B.
  * Everything else (older columns, bonus / leave-with-wages) is ignored on purpose.
  */
 
-export type SheetRow = { name: string; place: string; gift: string; cash: number; nextCash: number; note: string };
+export type SheetRow = { name: string; place: string; gift: string; cash: number; nextCash: number; nextGift: string; note: string };
 export type Candidate = { id: string; name: string; status: string; company?: string };
 export type ImportGift = {
   recipientType: "staff" | "other"; employeeId: string | null; recipientName: string; company: string; giftItem: string;
@@ -36,8 +36,9 @@ export function parseSheet(text: string): SheetRow[] {
     const gift = cells[5 + shift] || "";
     const cash = amount(cells[6 + shift]);
     const nextCash = amount(cells[10 + shift]);
-    if (!gift && !cash && !nextCash) continue;
-    rows.push({ name, place: cells[1 + shift] || "", gift, cash, nextCash, note: notes.join(". ") });
+    const nextGift = /^\d+$/.test(cells[11 + shift] || "") ? "" : cells[11 + shift] || "";
+    if (!gift && !cash && !nextCash && !nextGift) continue;
+    rows.push({ name, place: cells[1 + shift] || "", gift, cash, nextCash, nextGift, note: notes.join(". ") });
   }
   return rows;
 }
@@ -76,7 +77,7 @@ export function buildGifts(rows: SheetRow[], year: number, sheetLabel: string, p
       out.push({ ...base, giftItem: item, quantity: 1, unitValue: row.cash, status: "handed_over", year,
         notes: [...notes, row.gift ? "Value is the cash only; the price of the gift items was not in the sheet" : ""].filter(Boolean).join(". "), });
     }
-    if (row.nextCash) out.push({ ...base, giftItem: "Cash", quantity: 1, unitValue: row.nextCash, status: "planned", year: year + 1, notes: [...notes, "Planned in the sheet, not yet given"].join(". ") });
+    if (row.nextCash || row.nextGift) out.push({ ...base, giftItem: row.nextGift && row.nextCash ? `${row.nextGift} + Cash` : row.nextGift || "Cash", quantity: 1, unitValue: row.nextCash, status: "planned", year: year + 1, notes: [...notes, "Planned in the sheet, not yet given"].join(". ") });
   }
   return out;
 }
