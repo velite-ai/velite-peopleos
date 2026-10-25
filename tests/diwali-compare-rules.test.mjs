@@ -34,3 +34,15 @@ test("two gifts to one person in a year are added together", () => {
   assert.equal(view.rows[0].cells[2025].value, 1500);
   assert.deepEqual(view.rows[0].cells[2025].items, ["Cash", "2 × Bottle Set"]);
 });
+
+test("people are counted per group (Workers / Office) and year, including those who have left", () => {
+  const view = compareYears([
+    gift(2025, "A", 100, { group: "Workers" }), gift(2025, "B", 200, { company: "Workers (HAMBRAN)" }),
+    gift(2025, "C", 300, { group: "Office", employeeId: "e1", employeeStatus: "separated" }), gift(2026, "A", 150, { group: "Workers", status: "planned" }),
+  ]);
+  const workers = view.byGroup.find(item => item.group === "Workers").years;
+  assert.deepEqual(workers.map(cell => [cell.year, cell.people, cell.value]), [[2025, 2, 300], [2026, 1, 150]]);
+  const office = view.byGroup.find(item => item.group === "Office").years;
+  assert.deepEqual(office.map(cell => [cell.people, cell.left]), [[1, 1], [0, 0]]);
+  assert.equal(view.people[2025], 3);
+});

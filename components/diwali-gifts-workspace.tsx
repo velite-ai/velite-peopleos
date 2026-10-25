@@ -153,7 +153,7 @@ function GiftForm({ gift, year, onClose, onSaved }: { gift: Gift | null; year: n
   </div>;
 }
 
-type ImportResult = { rows: number; toAdd: number; alreadyThere: number; byYear: { year: number; gifts: number; value: number }[]; linked: number; notLinked: number; partial: string[]; left: string[]; unclear: string[]; added: number };
+type ImportResult = { rows: number; toAdd: number; alreadyThere: number; toLabel: number; byYear: { year: number; gifts: number; value: number }[]; linked: number; notLinked: number; partial: string[]; left: string[]; unclear: string[]; added: number };
 
 function ImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (message: string, year?: number) => void }) {
   const [sheet, setSheet] = useState("Workers");
@@ -166,7 +166,7 @@ function ImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (messa
     setBusy(true); setError("");
     try {
       const data = await bodyData(await fetch("/api/diwali-gifts/import", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text, year: Number(year), sheet, dryRun }) })) as ImportResult;
-      if (dryRun) setResult(data); else onDone(`${data.added} gifts added.`, Number(year));
+      if (dryRun) setResult(data); else onDone(`${data.added} gifts added${data.toLabel ? `, ${data.toLabel} labelled ${sheet}` : ""}.`, Number(year));
     } catch (problem) { setError((problem as Error).message); }
     setBusy(false);
   }
@@ -180,7 +180,7 @@ function ImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (messa
         <label>Diwali year<input type="number" value={year} onChange={event => { setYear(event.target.value); setResult(null); }} /></label>
         <label className="span-two">Pasted sheet<textarea rows={8} value={text} onChange={event => { setText(event.target.value); setResult(null); }} placeholder="Paste here" /></label>
         {result && <div className="span-two">
-          <p><b>{result.toAdd}</b> gifts will be added ({result.alreadyThere} already in the register are skipped). {result.byYear.map(item => `Diwali ${item.year}: ${item.gifts} gifts, cash ${money(item.value)}`).join(" · ")}.</p>
+          <p><b>{result.toAdd}</b> gifts will be added ({result.alreadyThere} already in the register are skipped{result.toLabel > 0 ? `; ${result.toLabel} of those get the “${sheet}” label so they can be counted by group` : ""}). {result.byYear.map(item => `Diwali ${item.year}: ${item.gifts} gifts, cash ${money(item.value)}`).join(" · ")}.</p>
           <p>{result.linked} are linked to a staff record; {result.notLinked} are not (one-word names and people not found are saved by name only).</p>
           {result.left.length > 0 && <p><b>Have since left:</b> {names(result.left)}</p>}
           {result.partial.length > 0 && <p><b>Linked by part of the name (check):</b> {names(result.partial)}</p>}
@@ -189,7 +189,7 @@ function ImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (messa
         {error && <p className="form-error span-two" role="alert">{error}</p>}
         <div className="modal-actions span-two"><button type="button" className="secondary" onClick={onClose}>Cancel</button>
           <button type="button" className="secondary" disabled={busy || !text.trim()} onClick={() => run(true)}>1. Check first</button>
-          <button type="button" className="primary" disabled={busy || !result || !result.toAdd} onClick={() => run(false)}>2. Add to register</button></div>
+          <button type="button" className="primary" disabled={busy || !result || (!result.toAdd && !result.toLabel)} onClick={() => run(false)}>2. Add to register</button></div>
       </div>
     </section>
   </div>;

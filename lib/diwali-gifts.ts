@@ -37,6 +37,7 @@ export const patchSchema = z.object(giftShape).partial().extend({ status: z.enum
 export type GiftDetails = {
   recipientType: "staff" | "other"; employeeId: string | null; recipientName: string; company: string; giftItem: string;
   quantity: number; unitValue: number; totalValue: number; vendor: string; billNo: string; givenBy: string; givenOn: string | null; notes: string;
+  group?: string; // which sheet tab the gift came from (Workers / Office); older rows have none
 };
 
 export function sealGift(details: GiftDetails) { return sealJson(details); }
