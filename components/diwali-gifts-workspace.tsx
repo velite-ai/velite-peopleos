@@ -1,5 +1,6 @@
 "use client";
 
+import { DiwaliCompare } from "@/components/diwali-compare";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 type Gift = {
@@ -29,6 +30,7 @@ export function DiwaliGiftsWorkspace({ flash }: { flash: (message: string) => vo
   const [statusFilter, setStatusFilter] = useState("all");
   const [editing, setEditing] = useState<Gift | "new" | null>(null);
   const [refresh, setRefresh] = useState(0);
+  const [view, setView] = useState<"list" | "compare">("list");
   const [tool, setTool] = useState<"import" | "plan" | null>(null);
 
   const load = useCallback(() => {
@@ -71,7 +73,8 @@ export function DiwaliGiftsWorkspace({ flash }: { flash: (message: string) => vo
   }
 
   return <>
-    <div className="page-head"><div><span className="eyebrow">Confidential · Super Admin only</span><h1>Diwali gifts</h1><p>Who gets what, what it costs and whether it has been handed over. Nobody else can see this page.</p></div><div className="gift-filters"><button className="secondary" onClick={() => setTool("import")}>Load an earlier year</button><button className="secondary" onClick={() => setTool("plan")}>Plan {year + 1} from {year}</button><button className="primary" onClick={() => setEditing("new")}>＋ Add gift</button></div></div>
+    <div className="page-head"><div><span className="eyebrow">Confidential · Super Admin only</span><h1>Diwali gifts</h1><p>Who gets what, what it costs and whether it has been handed over. Nobody else can see this page.</p></div><div className="gift-filters"><button className={view === "compare" ? "primary" : "secondary"} onClick={() => setView(view === "compare" ? "list" : "compare")}>{view === "compare" ? "Back to the list" : "Compare years"}</button><button className="secondary" onClick={() => setTool("import")}>Load an earlier year</button><button className="secondary" onClick={() => setTool("plan")}>Plan {year + 1} from {year}</button><button className="primary" onClick={() => setEditing("new")}>＋ Add gift</button></div></div>
+    {view === "compare" ? <DiwaliCompare /> : <>
     <div className="metrics compact">
       <div className="metric"><div className="metric-icon purple">◎</div><span>GIFTS</span><strong>{all.length}</strong><small>{pieces} pieces in {year}</small></div>
       <div className="metric"><div className="metric-icon green">₹</div><span>TOTAL SPEND</span><strong>{money(spend)}</strong><small>All gifts for {year}</small></div>
@@ -93,6 +96,7 @@ export function DiwaliGiftsWorkspace({ flash }: { flash: (message: string) => vo
       </div>
       <div className="table-foot"><span>{visible.length} of {all.length} gifts shown · Amounts and names are stored encrypted</span></div>
     </section>
+    </>}
     {tool === "import" && <ImportDialog onClose={() => setTool(null)} onDone={(message, y) => { setTool(null); if (y) setYear(y); setRefresh(value => value + 1); flash(message); }} />}
     {tool === "plan" && <PlanDialog year={year} onClose={() => setTool(null)} onDone={message => { setTool(null); setYear(year + 1); setRefresh(value => value + 1); flash(message); }} />}
     {editing && <GiftForm gift={editing === "new" ? null : editing} year={year} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); setRefresh(value => value + 1); flash("Gift saved."); }} />}

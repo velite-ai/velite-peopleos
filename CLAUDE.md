@@ -615,3 +615,11 @@ Staff record → **Pay, PF & bank** → **Compensation history**: every entry ha
 Being a Super Administrator is no longer enough. `canUseGiftRegister` (`lib/diwali-gift-rules.ts`) also requires the login's email to be in `DIWALI_GIFTS_EMAILS` (comma separated, set in Coolify; **default `velite@velite.in`** when unset or empty).
 `requireSuperAdmin()` uses it, so every gift route answers 404 to everyone else (e.g. `operations@velite.in`). `GET /api/auth/me` returns `giftRegister: true|false`, which decides whether **Diwali gifts** shows in the menu.
 Data already in the register is unchanged. To add a person later: set `DIWALI_GIFTS_EMAILS=velite@velite.in,other@velite.in` and redeploy.
+
+---
+
+## 30. Year-by-year comparison of Diwali gifts — Oct 2026
+
+**More → Diwali gifts → Compare years**: one row per person, one column per year (cash and gift items), the change between the last two years, and totals / head-count per year (`lib/diwali-compare-rules.ts`, unit tested; `GET /api/diwali-gifts/compare`, same Super Admin / named-login rule as the rest).
+People linked to a staff record are matched by that record; others by name + place, so two "Baljit Kaur" from different villages stay separate. Filters: still with Velite, has left, got a gift last year but none this year, new this year. **Download for Excel** gives a CSV of the current filter.
+Planned years show "planned" under the amount. Values are the cash only (gift item prices are not in the sheet).
