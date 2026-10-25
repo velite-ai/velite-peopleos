@@ -11,7 +11,7 @@ export type SheetRow = { name: string; place: string; gift: string; cash: number
 export type Candidate = { id: string; name: string; status: string; company?: string };
 export type ImportGift = {
   recipientType: "staff" | "other"; employeeId: string | null; recipientName: string; company: string; giftItem: string;
-  quantity: number; unitValue: number; notes: string; status: "handed_over" | "planned"; year: number; match: "exact" | "partial" | "none" | "unclear";
+  quantity: number; unitValue: number; notes: string; status: "handed_over" | "planned"; year: number; group: string; match: "exact" | "partial" | "none" | "unclear";
 };
 
 export const WORKING = ["active", "probation", "notice_period"];
@@ -69,7 +69,7 @@ export function buildGifts(rows: SheetRow[], year: number, sheetLabel: string, p
     const where = row.place ? ` (${row.place})` : "";
     const base = {
       recipientType: person ? "staff" as const : "other" as const, employeeId: person?.id ?? null,
-      recipientName: person ? squash(person.name) : row.name, company: person ? person.company || "" : `${sheetLabel}${where}`, match,
+      recipientName: person ? squash(person.name) : row.name, company: person ? person.company || "" : `${sheetLabel}${where}`, group: sheetLabel, match,
     };
     const notes = [row.note, row.place ? `Village / place: ${row.place}` : "", match === "unclear" ? "Several staff share this name; not linked" : "", match === "none" ? "Not linked to a staff record" : "", match === "partial" ? "Linked by part of the name; please check" : ""].filter(Boolean);
     if (row.cash || row.gift) {

@@ -4,9 +4,16 @@
  */
 const nameKey = (value: string) => value.toLowerCase().replace(/[^a-z\s]/g, " ").replace(/\s+/g, " ").trim();
 
-export type CompareGift = { year: number; status: string; recipientType: string; employeeId: string | null; recipientName: string; company: string; giftItem: string; quantity: number; totalValue: number; employeeStatus?: string | null };
+export type CompareGift = { year: number; status: string; recipientType: string; employeeId: string | null; recipientName: string; company: string; group?: string | null; giftItem: string; quantity: number; totalValue: number; employeeStatus?: string | null };
 export type YearCell = { items: string[]; value: number; status: string };
-export type CompareRow = { key: string; name: string; company: string; left: boolean; cells: Record<number, YearCell> };
+export type CompareRow = { key: string; name: string; company: string; group: string; left: boolean; cells: Record<number, YearCell> };
+
+// Workers / Office come from the sheet tab; rows loaded before that was recorded are told apart by the label in the company field.
+export function groupOf(gift: Pick<CompareGift, "group" | "company">) {
+  if (gift.group) return gift.group;
+  const match = /^(workers|office)\b/i.exec(gift.company.trim());
+  return match ? match[1][0].toUpperCase() + match[1].slice(1).toLowerCase() : "Not labelled";
+}
 
 const LEFT = ["separated", "archived"];
 
@@ -17,7 +24,8 @@ export function compareYears(gifts: CompareGift[]) {
   const rows = new Map<string, CompareRow>();
   for (const gift of gifts) {
     const key = personKey(gift);
-    const row = rows.get(key) || { key, name: gift.recipientName, company: gift.company, left: false, cells: {} };
+    const row = rows.get(key) || { key, name: gift.recipientName, company: gift.company, group: groupOf(gift), left: false, cells: {} };
+    if (row.group === "Not labelled" && groupOf(gift) !== "Not labelled") row.group = groupOf(gift);
     if (gift.employeeStatus && LEFT.includes(gift.employeeStatus)) row.left = true;
     const cell = row.cells[gift.year] || { items: [], value: 0, status: gift.status };
     cell.items.push(gift.quantity > 1 ? `${gift.quantity} × ${gift.giftItem}` : gift.giftItem);
@@ -30,7 +38,13 @@ export function compareYears(gifts: CompareGift[]) {
   const sorted = [...rows.values()].sort((a, b) => a.name.localeCompare(b.name));
   const totals = Object.fromEntries(years.map(year => [year, sorted.reduce((sum, row) => sum + (row.cells[year]?.value || 0), 0)])) as Record<number, number>;
   const people = Object.fromEntries(years.map(year => [year, sorted.filter(row => row.cells[year]).length])) as Record<number, number>;
-  return { years, rows: sorted, totals, people };
+  // A proper head-count per group (Workers / Office) and year: people who got a gift, those who have since left, and the cash.
+  const groups = [...new Set(sorted.map(row => row.group))].sort();
+  const byGroup = groups.map(group => ({
+    group,
+    years: years.map(year => { const inYear = sorted.filter(row => row.group === group && row.cells[year]); return { year, people: inYear.length, left: inYear.filter(row => row.left).length, value: inYear.reduce((sum, row) => sum + row.cells[year].value, 0) }; }),
+  }));
+  return { years, rows: sorted, totals, people, byGroup };
 }
 
 // Change from the earlier year to the later one, in rupees (null when the person has no gift in one of them).
