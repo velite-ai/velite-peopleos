@@ -15,3 +15,12 @@ export function isUnrestrictedSuperAdmin(user: { apiKeyId?: string | null; roles
 export function giftTotal(quantity: number, unitValue: number) {
   return Math.round(quantity * unitValue * 100) / 100;
 }
+
+// The register is for named people only. DIWALI_GIFTS_EMAILS (comma separated, set in Coolify) names them;
+// without it only velite@velite.in may open it. Being a Super Administrator is still required as well.
+export const DEFAULT_GIFT_EMAILS = "velite@velite.in";
+export function canUseGiftRegister(user: { email?: string | null; apiKeyId?: string | null; roles?: GiftRoleAssignment[] } | null | undefined, allowed: string | undefined = process.env.DIWALI_GIFTS_EMAILS) {
+  if (!isUnrestrictedSuperAdmin(user)) return false;
+  const emails = (allowed?.trim() ? allowed : DEFAULT_GIFT_EMAILS).split(",").map(email => email.trim().toLowerCase()).filter(Boolean);
+  return emails.includes((user?.email || "").trim().toLowerCase());
+}

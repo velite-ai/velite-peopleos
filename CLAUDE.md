@@ -607,3 +607,11 @@ Staff record → **Pay, PF & bank** → **Compensation history**: every entry ha
 - Matching to Staff: full name only (case/spacing ignored); several people with one name → the one still working, else not linked. One-word names (common among workers) are never linked automatically; those rows are saved by name as "Someone else" with the village in the company field.
   `GET /api/diwali-gifts` now returns `employeeStatus` and the list shows "Has left" beside linked people who left.
 - The sheet's data is never stored in the repository: it is pasted at run time and saved encrypted.
+
+---
+
+## 29. Diwali register limited to named logins — Oct 2026
+
+Being a Super Administrator is no longer enough. `canUseGiftRegister` (`lib/diwali-gift-rules.ts`) also requires the login's email to be in `DIWALI_GIFTS_EMAILS` (comma separated, set in Coolify; **default `velite@velite.in`** when unset or empty).
+`requireSuperAdmin()` uses it, so every gift route answers 404 to everyone else (e.g. `operations@velite.in`). `GET /api/auth/me` returns `giftRegister: true|false`, which decides whether **Diwali gifts** shows in the menu.
+Data already in the register is unchanged. To add a person later: set `DIWALI_GIFTS_EMAILS=velite@velite.in,other@velite.in` and redeploy.

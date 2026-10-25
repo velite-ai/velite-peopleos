@@ -113,7 +113,7 @@ export default function Home() {
   const [people, setPeople] = useState<Person[]>([]);
   const [attendance, setAttendance] = useState<AttendanceRow[]>([]);
   const [calendarEvents,setCalendarEvents]=useState<CalendarDisplay[]>([]);
-  const [sessionUser,setSessionUser]=useState<{fullName:string;mustChangePassword:boolean;mfaEnrollmentRequired:boolean;roles:{code:string;businessHeadId:string|null;departmentId:string|null}[]} | null>(null);
+  const [sessionUser,setSessionUser]=useState<{fullName:string;mustChangePassword:boolean;mfaEnrollmentRequired:boolean;giftRegister?:boolean;roles:{code:string;businessHeadId:string|null;departmentId:string|null}[]} | null>(null);
   const [notifications,setNotifications]=useState<{unread:number;items:{id:string}[]}>({unread:0,items:[]});
   const [loading, setLoading] = useState(true);
   const [showMore,setShowMore]=useState(false);
@@ -123,7 +123,7 @@ export default function Home() {
   const headName = head === "all" ? "All Velite" : heads.find(item => item.id === head)?.name || "Velite";
   const canViewAll = Boolean(sessionUser?.roles?.some(role => role.code === "SUPER_ADMIN" || (role.code !== "EMPLOYEE" && !role.businessHeadId && !role.departmentId)));
   const employeeOnly = Boolean(sessionUser?.roles?.length && sessionUser.roles.every(role => role.code === "EMPLOYEE"));
-  const isSuperAdmin = Boolean(sessionUser?.roles?.some(role => role.code === "SUPER_ADMIN" && !role.businessHeadId && !role.departmentId));
+  const isSuperAdmin = Boolean(sessionUser?.giftRegister);
   const canAdmin = Boolean(sessionUser?.roles?.some(role => ["SUPER_ADMIN", "HR_ADMIN"].includes(role.code)));
   const flash=useCallback((message:string)=>{setToast(message);window.setTimeout(()=>setToast(""),2600)},[]);
 
