@@ -582,3 +582,14 @@ Staff record → **Pay, PF & bank** → **Compensation history** → **Add revis
 - **Bug fixed:** inserting a revision *before* an existing later one failed with a server error (`Invalid time value`: the next rate's start date came back as a date object and was turned into text wrongly). `app/api/employees/[id]/compensation/route.ts` now reads it as text.
 - **Bug fixed:** leaving *Next salary revision* blank on that form used to clear the employee's existing next-revision date. Blank now means "keep the current date" (`undefined` in the payload); a typed date still sets it.
 - Previous months' *actual* salary sheets (registers) are separate: they are imported with `scripts/import-salary-register.mjs` and shown under *Imported salary registers* on the same tab.
+
+---
+
+## 27. Editing an entry in the compensation history — Oct 2026
+
+Staff record → **Pay, PF & bank** → **Compensation history**: every entry has an **Edit** button (HR / payroll login with `payroll:write`) to correct its start date, annual CTC, monthly gross, basic, allowances and overtime rate, with a required reason.
+`PATCH /api/employees/[id]/compensation/[revisionId]`:
+- the new start date must stay **after the earlier entry's start and before the next entry's start**; the earlier entry's end date is moved to the day before the new start, so periods never overlap or leave a gap;
+- **blocked** when a salary month that used this rate is under review, approved, locked or paid (the message names the months): add a new revision instead, or reopen that month first. A month that is only *calculated* can still be edited;
+- writes `employee_events` (`compensation_revision`, before / after, `corrected: true`) and `audit_events` (`compensation.edit`); the employee's next salary revision date is not touched.
+- Not built: deleting an entry (two identical consecutive entries are harmless; edit one to fix it).
