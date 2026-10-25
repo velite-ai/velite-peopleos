@@ -573,3 +573,12 @@ Now the **exit card** on the Employment tab of the record (HR login with `separa
 - **Attendance** has filter chips (Everyone, Present, Absent, On leave, Not marked, Off / holiday) with counts; the day sheet can be narrowed to one of them.
 - People who were **not employed that day** (left on or before the day before, or joining later) are no longer counted or listed: "Present today … of 95 staff" used to include everyone who had left. They still show,
   marked "Not employed on this day", if searched by name on the Attendance sheet. The API (`GET /api/attendance`) is unchanged; the screens filter on status `not_employed`.
+
+---
+
+## 26. Adding earlier pay rates — Oct 2026
+
+Staff record → **Pay, PF & bank** → **Compensation history** → **Add revision** can be used for pay periods in the past (any *Effective from* date). The history stays in order: the earlier rate ends the day before the next one starts.
+- **Bug fixed:** inserting a revision *before* an existing later one failed with a server error (`Invalid time value`: the next rate's start date came back as a date object and was turned into text wrongly). `app/api/employees/[id]/compensation/route.ts` now reads it as text.
+- **Bug fixed:** leaving *Next salary revision* blank on that form used to clear the employee's existing next-revision date. Blank now means "keep the current date" (`undefined` in the payload); a typed date still sets it.
+- Previous months' *actual* salary sheets (registers) are separate: they are imported with `scripts/import-salary-register.mjs` and shown under *Imported salary registers* on the same tab.
