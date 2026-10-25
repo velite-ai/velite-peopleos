@@ -27,11 +27,11 @@ test("gift totals are worked out to the paisa", () => {
 
 test("every gift route checks for a Super Administrator, and nothing leaks into shared logs or search", async () => {
   const base = new URL("../app/api/diwali-gifts/", import.meta.url);
-  const files = [new URL("route.ts", base), new URL("[id]/route.ts", base)];
+  const files = [new URL("route.ts", base), new URL("[id]/route.ts", base), new URL("import/route.ts", base), new URL("plan/route.ts", base), new URL("compare/route.ts", base)];
   for (const file of files) {
     const source = await readFile(file, "utf8");
     const handlers = source.split(/export async function /).slice(1);
-    assert.ok(handlers.length >= 2);
+    assert.ok(handlers.length >= 1);
     for (const handler of handlers) assert.match(handler, /await requireSuperAdmin\(\)/, `${file.pathname}: ${handler.slice(0, 20)}`);
     assert.doesNotMatch(source, /audit_events/);
   }
