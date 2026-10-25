@@ -2,17 +2,17 @@ import { z } from "zod";
 import { fail } from "./api";
 import { currentUser } from "./auth";
 import { db } from "./database";
-import { GIFT_STATUSES, giftTotal, isUnrestrictedSuperAdmin } from "./diwali-gift-rules";
+import { GIFT_STATUSES, canUseGiftRegister, giftTotal } from "./diwali-gift-rules";
 import { openJson, sealJson } from "./encryption";
 
-// Every gift route starts here. Anyone who is not an unrestricted Super Administrator is told the page
+// Every gift route starts here. Anyone who is not an unrestricted Super Administrator on the allowed list is told the page
 // does not exist, so they cannot tell it is there.
 export async function requireSuperAdmin() {
   const user = await currentUser();
   if (!user) return fail("Authentication required", 401);
   if (user.mustChangePassword) return fail("Password change required", 403, { code: "PASSWORD_CHANGE_REQUIRED" });
   if (user.mfaEnrollmentRequired) return fail("Multi-factor authentication enrollment is required", 403, { code: "MFA_ENROLLMENT_REQUIRED" });
-  if (!isUnrestrictedSuperAdmin(user)) return fail("Not found", 404);
+  if (!canUseGiftRegister(user)) return fail("Not found", 404);
   return user;
 }
 

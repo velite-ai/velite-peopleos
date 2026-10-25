@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile, readdir } from "node:fs/promises";
 import test from "node:test";
-import { giftTotal, isUnrestrictedSuperAdmin } from "../lib/diwali-gift-rules.ts";
+import { canUseGiftRegister, giftTotal, isUnrestrictedSuperAdmin } from "../lib/diwali-gift-rules.ts";
 
 const role = (code, businessHeadId = null, departmentId = null) => ({ code, businessHeadId, departmentId });
 
@@ -36,7 +36,7 @@ test("every gift route checks for a Super Administrator, and nothing leaks into 
     assert.doesNotMatch(source, /audit_events/);
   }
   const lib = await readFile(new URL("../lib/diwali-gifts.ts", import.meta.url), "utf8");
-  assert.match(lib, /isUnrestrictedSuperAdmin/);
+  assert.match(lib, /canUseGiftRegister/);
   assert.match(lib, /fail\("Not found", 404\)/);
   assert.doesNotMatch(lib, /audit_events/);
   const migration = await readFile(new URL("../database/023_diwali_gifts.sql", import.meta.url), "utf8");
@@ -54,4 +54,16 @@ test("every gift route checks for a Super Administrator, and nothing leaks into 
       }
     }
   }
+});
+
+test("only the named logins may use the register, even if they are Super Administrators", () => {
+  const admin = email => ({ email, roles: [role("SUPER_ADMIN")] });
+  assert.equal(canUseGiftRegister(admin("velite@velite.in"), undefined), true);
+  assert.equal(canUseGiftRegister(admin("Velite@Velite.in "), undefined), true);
+  assert.equal(canUseGiftRegister(admin("operations@velite.in"), undefined), false);
+  assert.equal(canUseGiftRegister(admin("admin@velite.in"), ""), false);
+  assert.equal(canUseGiftRegister(admin("operations@velite.in"), "velite@velite.in, operations@velite.in"), true);
+  assert.equal(canUseGiftRegister({ email: "velite@velite.in", roles: [role("HR_ADMIN")] }, undefined), false);
+  assert.equal(canUseGiftRegister({ email: "velite@velite.in", apiKeyId: "k", roles: [role("SUPER_ADMIN")] }, undefined), false);
+  assert.equal(canUseGiftRegister(null, undefined), false);
 });
