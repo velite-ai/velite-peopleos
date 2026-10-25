@@ -78,3 +78,11 @@ test("a copy that starts at column B (name first) reads the same as one that sta
   assert.deepEqual(rows.map(row => [row.name, row.cash]), [["SHIWANI YADAV", 30000], ["BINDIYA", 0], ["Hemant", 2100]]);
   assert.equal(rows[1].gift, "Dinner Set+Dry Fruit (400g) + Biscuit");
 });
+
+test("column M is next year's planned gift; a planned gift with no cash is kept, a zero with no gift is not", () => {
+  const row = (name, cash25, cash26, gift26) => line(["SR. NO. 1", name, "HAMBRAN", "Suit", "100", "", "Casserole Set", cash25, "", "", "", cash26, gift26]);
+  const text = [row("SARITA DEVI", "21000", "23000", "Blanket"), row("PARMINDER KAUR", "", "", "Blanket"), row("KULWANT KAUR", "3100", "0", ""), row("PRIYA", "", "0", "")].join("\n");
+  const gifts = buildGifts(parseSheet(text), 2025, "Workers", []).filter(gift => gift.year === 2026);
+  assert.deepEqual(gifts.map(gift => [gift.recipientName, gift.giftItem, gift.unitValue]), [["SARITA DEVI", "Blanket + Cash", 23000], ["PARMINDER KAUR", "Blanket", 0]]);
+  assert.equal(gifts[0].status, "planned");
+});
