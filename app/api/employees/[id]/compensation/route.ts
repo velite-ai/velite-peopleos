@@ -13,7 +13,7 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
       await tx`SELECT pg_advisory_xact_lock(hashtext(${`employee-compensation:${id}`}))`;
       const [sameStart]=await tx`SELECT id FROM employee_compensation WHERE employee_id=${id} AND effective_from=${input.effectiveFrom}::date`;
       if(sameStart)throw new Error('COMPENSATION_START_EXISTS');
-      const [next]=await tx<{effective_from:string}[]>`SELECT effective_from FROM employee_compensation WHERE employee_id=${id} AND effective_from>${input.effectiveFrom}::date ORDER BY effective_from LIMIT 1`;
+      const [next]=await tx<{effective_from:string}[]>`SELECT effective_from::text AS effective_from FROM employee_compensation WHERE employee_id=${id} AND effective_from>${input.effectiveFrom}::date ORDER BY effective_from LIMIT 1`;
       await tx`UPDATE employee_compensation SET effective_to=${input.effectiveFrom}::date-1 WHERE employee_id=${id} AND effective_from<${input.effectiveFrom}::date AND (effective_to IS NULL OR effective_to>=${input.effectiveFrom}::date)`;
       const effectiveTo=next?new Date(new Date(`${next.effective_from}T00:00:00Z`).getTime()-86400000).toISOString().slice(0,10):null;
       const [created]=await tx`INSERT INTO employee_compensation (employee_id,effective_from,effective_to,annual_ctc,monthly_gross,structure,reason,approved_by) VALUES (${id},${input.effectiveFrom},${effectiveTo},${input.annualCtc},${input.monthlyGross},${JSON.stringify(input.structure)}::jsonb,${input.reason},${user.id}) RETURNING *`;
