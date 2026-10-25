@@ -10,7 +10,10 @@ test("adding an earlier pay rate reads the next rate's start date as text (the d
 });
 
 test("a blank 'next salary revision' on the pay form keeps the date already on the record instead of clearing it", () => {
-  assert.match(drawer, /nextSalaryRevisionDate: data\.get\("nextSalaryRevisionDate"\) \|\| undefined/);
-  assert.doesNotMatch(drawer, /nextSalaryRevisionDate: data\.get\("nextSalaryRevisionDate"\) \|\| null/);
+  // Only the pay (compensation) form: the Edit dates form is the place that may clear the date on purpose.
+  const payLine = drawer.split("\n").find(line => line.includes('kind === "compensation") { path'));
+  assert.ok(payLine, "pay form submit line found");
+  assert.match(payLine, /nextSalaryRevisionDate: data\.get\("nextSalaryRevisionDate"\) \|\| undefined/);
+  assert.doesNotMatch(payLine, /nextSalaryRevisionDate: data\.get\("nextSalaryRevisionDate"\) \|\| null/);
   assert.match(route, /input\.nextSalaryRevisionDate!==undefined/);
 });
