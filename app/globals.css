@@ -275,3 +275,5 @@ html,body{font-family:"Segoe UI",system-ui,-apple-system,Roboto,"Helvetica Neue"
 .att-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}.att-chips button{height:34px;border:1px solid #cbd2cc;background:#fff;border-radius:17px;padding:0 13px;font-size:15px;cursor:pointer}.att-chips button b{margin-left:5px}.att-chips button.active{background:#246b4d;border-color:#246b4d;color:#fff}
 
 .record-list.financial>div{align-items:center}.pay-edit{margin-left:auto;height:32px;border:1px solid #cbd2cc;background:#fff;border-radius:6px;padding:0 12px;font-size:14px;cursor:pointer}
+
+.gift-left { color: #b42318; font-style: normal; font-weight: 600; font-size: 0.85em; }

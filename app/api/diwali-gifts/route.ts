@@ -1,6 +1,6 @@
 import { apiError, ok } from "@/lib/api";
 import { db } from "@/lib/database";
-import { GiftRow, createSchema, requireSuperAdmin, resolveRecipient, sealGift, toGift, withTotal } from "@/lib/diwali-gifts";
+import { allPeople, GiftRow, createSchema, requireSuperAdmin, resolveRecipient, sealGift, toGift, withTotal } from "@/lib/diwali-gifts";
 
 export async function GET(request: Request) {
   try {
@@ -9,11 +9,13 @@ export async function GET(request: Request) {
     const requested = Number(new URL(request.url).searchParams.get("year"));
     const year = Number.isInteger(requested) && requested >= 2000 && requested <= 2100 ? requested : new Date().getFullYear();
     const sql = db();
-    const [rows, years] = await Promise.all([
+    const [rows, years, people] = await Promise.all([
       sql<GiftRow[]>`SELECT id,gift_year,status,details_encrypted,updated_at FROM diwali_gifts WHERE gift_year=${year} AND deleted_at IS NULL ORDER BY created_at`,
       sql<{ gift_year: number }[]>`SELECT DISTINCT gift_year FROM diwali_gifts WHERE deleted_at IS NULL ORDER BY gift_year DESC`,
+      allPeople(),
     ]);
-    return ok({ year, years: years.map(row => row.gift_year), gifts: rows.map(toGift) });
+    const status = new Map(people.map(person => [person.id, person.status]));
+    return ok({ year, years: years.map(row => row.gift_year), gifts: rows.map(row => { const gift = toGift(row); return { ...gift, employeeStatus: gift.employeeId ? status.get(gift.employeeId) ?? null : null }; }) });
   } catch (error) { return apiError(error); }
 }
 

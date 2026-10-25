@@ -593,3 +593,17 @@ Staff record → **Pay, PF & bank** → **Compensation history**: every entry ha
 - **blocked** when a salary month that used this rate is under review, approved, locked or paid (the message names the months): add a new revision instead, or reopen that month first. A month that is only *calculated* can still be edited;
 - writes `employee_events` (`compensation_revision`, before / after, `corrected: true`) and `audit_events` (`compensation.edit`); the employee's next salary revision date is not touched.
 - Not built: deleting an entry (two identical consecutive entries are harmless; edit one to fix it).
+
+---
+
+## 28. Loading earlier Diwali years and planning the next — Oct 2026
+
+**More → Diwali gifts** (Super Admin only, as in section 12) gained two buttons:
+- **Load an earlier year**: paste a tab of the Google Sheet (Ctrl+A, Ctrl+C). Only column G (gift given), H (cash paid) and L (next year's planned cash) are read; older-year columns and Bonus/LWW are ignored (`lib/diwali-import-rules.ts`, unit tested).
+  One register row per person: item = gift text + "Cash", value = the cash (the sheet has no price for gift items); status Handed over; column L becomes a Planned "Cash" row for the following year.
+  **Check first** (dry run) shows counts, who has since left, and name matches that need checking; **Add to register** inserts everything in one transaction through the normal sealing and `diwali_gift_events`.
+  Running it again skips rows already there (same name, gift, amount). API: `POST /api/diwali-gifts/import`.
+- **Plan next year from this year**: copies last year's gifts as Planned, skipping people with status `separated` / `archived`, and anyone already planned. API: `POST /api/diwali-gifts/plan`.
+- Matching to Staff: full name only (case/spacing ignored); several people with one name → the one still working, else not linked. One-word names (common among workers) are never linked automatically; those rows are saved by name as "Someone else" with the village in the company field.
+  `GET /api/diwali-gifts` now returns `employeeStatus` and the list shows "Has left" beside linked people who left.
+- The sheet's data is never stored in the repository: it is pasted at run time and saved encrypted.

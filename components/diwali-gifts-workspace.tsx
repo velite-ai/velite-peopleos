@@ -4,8 +4,9 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 type Gift = {
   id: string; year: number; status: string; recipientType: "staff" | "other"; employeeId: string | null; recipientName: string; company: string;
-  giftItem: string; quantity: number; unitValue: number; totalValue: number; vendor: string; billNo: string; givenBy: string; givenOn: string | null; notes: string;
+  giftItem: string; quantity: number; unitValue: number; totalValue: number; vendor: string; billNo: string; givenBy: string; givenOn: string | null; notes: string; employeeStatus?: string | null;
 };
+const hasLeft = (gift: Gift) => gift.employeeStatus === "separated" || gift.employeeStatus === "archived";
 type StaffOption = { id: string; first_name: string; last_name: string | null; employee_code: string; business_head: string };
 
 const STATUSES: [string, string][] = [["planned", "Planned"], ["bought", "Bought"], ["handed_over", "Handed over"]];
@@ -28,6 +29,7 @@ export function DiwaliGiftsWorkspace({ flash }: { flash: (message: string) => vo
   const [statusFilter, setStatusFilter] = useState("all");
   const [editing, setEditing] = useState<Gift | "new" | null>(null);
   const [refresh, setRefresh] = useState(0);
+  const [tool, setTool] = useState<"import" | "plan" | null>(null);
 
   const load = useCallback(() => {
     let current = true;
@@ -69,7 +71,7 @@ export function DiwaliGiftsWorkspace({ flash }: { flash: (message: string) => vo
   }
 
   return <>
-    <div className="page-head"><div><span className="eyebrow">Confidential · Super Admin only</span><h1>Diwali gifts</h1><p>Who gets what, what it costs and whether it has been handed over. Nobody else can see this page.</p></div><button className="primary" onClick={() => setEditing("new")}>＋ Add gift</button></div>
+    <div className="page-head"><div><span className="eyebrow">Confidential · Super Admin only</span><h1>Diwali gifts</h1><p>Who gets what, what it costs and whether it has been handed over. Nobody else can see this page.</p></div><div className="gift-filters"><button className="secondary" onClick={() => setTool("import")}>Load an earlier year</button><button className="secondary" onClick={() => setTool("plan")}>Plan {year + 1} from {year}</button><button className="primary" onClick={() => setEditing("new")}>＋ Add gift</button></div></div>
     <div className="metrics compact">
       <div className="metric"><div className="metric-icon purple">◎</div><span>GIFTS</span><strong>{all.length}</strong><small>{pieces} pieces in {year}</small></div>
       <div className="metric"><div className="metric-icon green">₹</div><span>TOTAL SPEND</span><strong>{money(spend)}</strong><small>All gifts for {year}</small></div>
@@ -80,7 +82,7 @@ export function DiwaliGiftsWorkspace({ flash }: { flash: (message: string) => vo
       <div className="table-tools gift-tools"><div className="gift-filters"><select value={year} onChange={event => setYear(Number(event.target.value))} aria-label="Year">{yearOptions.map(value => <option key={value} value={value}>Diwali {value}</option>)}</select><input type="search" placeholder="Find a name, gift or bill" value={search} onChange={event => setSearch(event.target.value)} aria-label="Find a gift" /><select value={statusFilter} onChange={event => setStatusFilter(event.target.value)} aria-label="Status"><option value="all">All statuses</option>{STATUSES.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></div><button className="secondary" disabled={!visible.length} onClick={download}>⇩ Download this list</button></div>
       <div className="data-table gift-table"><div className="tr th"><span>RECIPIENT</span><span>GIFT</span><span>VALUE</span><span>STATUS</span><span>GIVEN</span><span></span></div>
         {visible.map(gift => <div className="tr" key={gift.id}>
-          <span><b>{gift.recipientName}<small>{gift.company || (gift.recipientType === "other" ? "Outside Velite" : "")}</small></b></span>
+          <span><b>{gift.recipientName}{hasLeft(gift) && <em className="gift-left"> · Has left</em>}<small>{gift.company || (gift.recipientType === "other" ? "Outside Velite" : "")}</small></b></span>
           <span><b>{gift.giftItem}<small>{gift.quantity} × {money(gift.unitValue)}{gift.vendor ? ` · ${gift.vendor}` : ""}{gift.billNo ? ` · Bill ${gift.billNo}` : ""}</small></b></span>
           <span><b>{money(gift.totalValue)}</b></span>
           <span><select className={`gift-status ${gift.status}`} value={gift.status} onChange={event => changeStatus(gift, event.target.value)} aria-label={`Status for ${gift.recipientName}`}>{STATUSES.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></span>
@@ -91,6 +93,8 @@ export function DiwaliGiftsWorkspace({ flash }: { flash: (message: string) => vo
       </div>
       <div className="table-foot"><span>{visible.length} of {all.length} gifts shown · Amounts and names are stored encrypted</span></div>
     </section>
+    {tool === "import" && <ImportDialog onClose={() => setTool(null)} onDone={(message, y) => { setTool(null); if (y) setYear(y); setRefresh(value => value + 1); flash(message); }} />}
+    {tool === "plan" && <PlanDialog year={year} onClose={() => setTool(null)} onDone={message => { setTool(null); setYear(year + 1); setRefresh(value => value + 1); flash(message); }} />}
     {editing && <GiftForm gift={editing === "new" ? null : editing} year={year} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); setRefresh(value => value + 1); flash("Gift saved."); }} />}
   </>;
 }
@@ -141,6 +145,81 @@ function GiftForm({ gift, year, onClose, onSaved }: { gift: Gift | null; year: n
         {error && <p className="form-error span-two" role="alert">{error}</p>}
         <div className="modal-actions span-two"><button type="button" className="secondary" onClick={onClose}>Cancel</button><button className="primary" disabled={busy}>{busy ? "Saving…" : "Save gift"}</button></div>
       </form>
+    </section>
+  </div>;
+}
+
+type ImportResult = { rows: number; toAdd: number; alreadyThere: number; byYear: { year: number; gifts: number; value: number }[]; linked: number; notLinked: number; partial: string[]; left: string[]; unclear: string[]; added: number };
+
+function ImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (message: string, year?: number) => void }) {
+  const [sheet, setSheet] = useState("Workers");
+  const [year, setYear] = useState("2025");
+  const [text, setText] = useState("");
+  const [result, setResult] = useState<ImportResult | null>(null);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function run(dryRun: boolean) {
+    setBusy(true); setError("");
+    try {
+      const data = await bodyData(await fetch("/api/diwali-gifts/import", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text, year: Number(year), sheet, dryRun }) })) as ImportResult;
+      if (dryRun) setResult(data); else onDone(`${data.added} gifts added.`, Number(year));
+    } catch (problem) { setError((problem as Error).message); }
+    setBusy(false);
+  }
+  const names = (list: string[]) => list.slice(0, 12).join(", ") + (list.length > 12 ? ` and ${list.length - 12} more` : "");
+  return <div className="modal-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
+    <section className="modal" role="dialog" aria-modal="true" aria-labelledby="gift-import-title">
+      <div className="modal-head"><div><span className="eyebrow">From your Google Sheet</span><h2 id="gift-import-title">Load an earlier year</h2></div><button onClick={onClose} aria-label="Close">×</button></div>
+      <div className="form-grid">
+        <p className="span-two">Open one tab of the sheet, press Ctrl+A then Ctrl+C, and paste below. Gift is read from column G and cash from column H; column L is next year’s planned cash. Everything else is ignored. Do each tab (Workers, Office) separately.</p>
+        <label>Tab name (kept as a label)<input value={sheet} onChange={event => { setSheet(event.target.value); setResult(null); }} /></label>
+        <label>Diwali year<input type="number" value={year} onChange={event => { setYear(event.target.value); setResult(null); }} /></label>
+        <label className="span-two">Pasted sheet<textarea rows={8} value={text} onChange={event => { setText(event.target.value); setResult(null); }} placeholder="Paste here" /></label>
+        {result && <div className="span-two">
+          <p><b>{result.toAdd}</b> gifts will be added ({result.alreadyThere} already in the register are skipped). {result.byYear.map(item => `Diwali ${item.year}: ${item.gifts} gifts, cash ${money(item.value)}`).join(" · ")}.</p>
+          <p>{result.linked} are linked to a staff record; {result.notLinked} are not (one-word names and people not found are saved by name only).</p>
+          {result.left.length > 0 && <p><b>Have since left:</b> {names(result.left)}</p>}
+          {result.partial.length > 0 && <p><b>Linked by part of the name (check):</b> {names(result.partial)}</p>}
+          {result.unclear.length > 0 && <p><b>Several staff share the name, not linked:</b> {names(result.unclear)}</p>}
+        </div>}
+        {error && <p className="form-error span-two" role="alert">{error}</p>}
+        <div className="modal-actions span-two"><button type="button" className="secondary" onClick={onClose}>Cancel</button>
+          <button type="button" className="secondary" disabled={busy || !text.trim()} onClick={() => run(true)}>1. Check first</button>
+          <button type="button" className="primary" disabled={busy || !result || !result.toAdd} onClick={() => run(false)}>2. Add to register</button></div>
+      </div>
+    </section>
+  </div>;
+}
+
+type PlanResult = { toYear: number; copied: number; value: number; left: number; leftValue: number; alreadyPlanned: number; added: number };
+
+function PlanDialog({ year, onClose, onDone }: { year: number; onClose: () => void; onDone: (message: string) => void }) {
+  const [result, setResult] = useState<PlanResult | null>(null);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const call = useCallback(async (dryRun: boolean) => {
+    setBusy(true); setError("");
+    try {
+      const data = await bodyData(await fetch("/api/diwali-gifts/plan", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ fromYear: year, dryRun }) })) as PlanResult;
+      if (dryRun) setResult(data); else onDone(`${data.added} planned gifts added for Diwali ${data.toYear}.`);
+    } catch (problem) { setError((problem as Error).message); }
+    setBusy(false);
+  }, [year, onDone]);
+  useEffect(() => { call(true); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  return <div className="modal-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
+    <section className="modal" role="dialog" aria-modal="true" aria-labelledby="gift-plan-title">
+      <div className="modal-head"><div><span className="eyebrow">Planning</span><h2 id="gift-plan-title">Plan Diwali {year + 1} from {year}</h2></div><button onClick={onClose} aria-label="Close">×</button></div>
+      <div className="form-grid">
+        {!result && !error && <p className="span-two">Checking…</p>}
+        {result && <div className="span-two">
+          <p>Same gift and amount as {year}, marked <b>Planned</b>, for <b>{result.copied}</b> recipients — about <b>{money(result.value)}</b>.</p>
+          {result.left > 0 && <p>{result.left} recipients ({money(result.leftValue)}) are skipped because they have left.</p>}
+          {result.alreadyPlanned > 0 && <p>{result.alreadyPlanned} already have a gift planned for {year + 1} and are not touched.</p>}
+          <p>You can change any amount afterwards. People saved by name only (not linked to a staff record) are copied, so check them.</p>
+        </div>}
+        {error && <p className="form-error span-two" role="alert">{error}</p>}
+        <div className="modal-actions span-two"><button type="button" className="secondary" onClick={onClose}>Cancel</button><button type="button" className="primary" disabled={busy || !result || !result.copied} onClick={() => call(false)}>Add to Diwali {year + 1}</button></div>
+      </div>
     </section>
   </div>;
 }
