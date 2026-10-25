@@ -66,3 +66,15 @@ test("planning skips people who have left and people already planned", () => {
   assert.equal(plan.left.length, 1);
   assert.equal(plan.already.length, 1);
 });
+
+test("a copy that starts at column B (name first) reads the same as one that starts at column A", () => {
+  const fromB = [
+    line(["SHIWANI YADAV", "LUDHIANA", "Dry Fruit (1000)", "26000", "", "Dinner Set+Dry Fruit (400g) + Biscuit ", "30000"]),
+    line(["BINDIYA", "LUDHIANA", "Dry Fruit (1000)", "1100", "", "Dinner Set+Dry Fruit (400g) + Biscuit ", ""]),
+    line(["Hemant", "", "", "", "", "Dinner Set+Dry Fruit (400g) + Biscuit ", "2100"]),
+    line(["", "", "", "", "", "", "216500"]),
+  ].join("\n");
+  const rows = parseSheet(fromB);
+  assert.deepEqual(rows.map(row => [row.name, row.cash]), [["SHIWANI YADAV", 30000], ["BINDIYA", 0], ["Hemant", 2100]]);
+  assert.equal(rows[1].gift, "Dinner Set+Dry Fruit (400g) + Biscuit");
+});
