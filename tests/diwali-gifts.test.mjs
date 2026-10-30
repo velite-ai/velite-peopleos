@@ -67,3 +67,21 @@ test("only the named logins may use the register, even if they are Super Adminis
   assert.equal(canUseGiftRegister({ email: "velite@velite.in", apiKeyId: "k", roles: [role("SUPER_ADMIN")] }, undefined), false);
   assert.equal(canUseGiftRegister(null, undefined), false);
 });
+
+test("gift items and cash are added up separately and together", async () => {
+  const { giftTotals, giftSummary, legacyParts } = await import("../lib/diwali-gift-rules.ts");
+  const items = [{ item: "Dry fruit box", quantity: 2, unitValue: 500 }, { item: "Blanket", quantity: 1, unitValue: 799.5 }];
+  assert.deepEqual(giftTotals(items, 1100), { giftValue: 1799.5, cashAmount: 1100, totalValue: 2899.5 });
+  assert.deepEqual(giftTotals([], 500), { giftValue: 0, cashAmount: 500, totalValue: 500 });
+  assert.deepEqual(giftTotals(items, 0), { giftValue: 1799.5, cashAmount: 0, totalValue: 1799.5 });
+  assert.equal(giftSummary(items, 1100), "2 × Dry fruit box + Blanket + Cash");
+  assert.equal(giftSummary([], 500), "Cash");
+  assert.equal(giftSummary([{ item: "Blanket", quantity: 1, unitValue: 0 }], 0), "Blanket");
+});
+
+test("gifts saved the old way (one item line, or 'X + Cash' from the sheet) are read as items and cash", async () => {
+  const { legacyParts } = await import("../lib/diwali-gift-rules.ts");
+  assert.deepEqual(legacyParts({ giftItem: "Cash", quantity: 1, unitValue: 5100, totalValue: 5100 }), { items: [], cashAmount: 5100 });
+  assert.deepEqual(legacyParts({ giftItem: "Casserole Set + Sweet Box + Cash", quantity: 1, unitValue: 21000, totalValue: 21000 }), { items: [{ item: "Casserole Set + Sweet Box", quantity: 1, unitValue: 0 }], cashAmount: 21000 });
+  assert.deepEqual(legacyParts({ giftItem: "Dry fruit box", quantity: 3, unitValue: 400, totalValue: 1200 }), { items: [{ item: "Dry fruit box", quantity: 3, unitValue: 400 }], cashAmount: 0 });
+});

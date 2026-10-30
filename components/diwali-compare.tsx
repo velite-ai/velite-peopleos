@@ -21,8 +21,8 @@ export function DiwaliCompare() {
 
   function download() {
     const cell = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""')}"`;
-    const header = ["Person", "Group", "Company / place", "Has left", ...view.years.flatMap(year => [`${year} gift`, `${year} value (INR)`])];
-    const lines = [header, ...rows.map(row => [row.name, row.group, row.company, row.left ? "Yes" : "", ...view.years.flatMap(year => [row.cells[year]?.items.join("; ") || "", row.cells[year]?.value ?? ""])])].map(line => line.map(cell).join(","));
+    const header = ["Person", "Group", "Company / place", "Has left", ...view.years.flatMap(year => [`${year} gift`, `${year} gifts value`, `${year} cash`, `${year} total (INR)`])];
+    const lines = [header, ...rows.map(row => [row.name, row.group, row.company, row.left ? "Yes" : "", ...view.years.flatMap(year => [row.cells[year]?.items.join("; ") || "", row.cells[year]?.gifts ?? "", row.cells[year]?.cash ?? "", row.cells[year]?.value ?? ""])])].map(line => line.map(cell).join(","));
     const link = document.createElement("a");
     link.href = URL.createObjectURL(new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" }));
     link.download = "diwali-year-by-year.csv"; link.click(); URL.revokeObjectURL(link.href);
@@ -48,12 +48,12 @@ export function DiwaliCompare() {
         <thead><tr><th>Person</th>{view.years.map(year => <th key={year}>{year}</th>)}{before && last && <th>Change {before}→{last}</th>}</tr></thead>
         <tbody>{rows.map(row => { const diff = before && last ? change(row, before, last) : null; return <tr key={row.key}>
           <td><b>{row.name}{row.left && <em className="gift-left"> · Has left</em>}</b><small>{row.company}</small></td>
-          {view.years.map(year => { const cell = row.cells[year]; return <td key={year}>{cell ? <><b>{money(cell.value)}</b><small>{cell.items.join("; ")}{cell.status === "planned" ? " · planned" : ""}</small></> : "—"}</td>; })}
+          {view.years.map(year => { const cell = row.cells[year]; return <td key={year}>{cell ? <><b>{money(cell.value)}</b><small>{cell.items.join("; ")}{cell.status === "planned" ? " · planned" : ""}</small>{(cell.gifts > 0 || cell.cash > 0) && <small>Gifts {money(cell.gifts)} + Cash {money(cell.cash)}</small>}</> : "—"}</td>; })}
           {before && last && <td>{diff === null ? "—" : diff === 0 ? "same" : `${diff > 0 ? "+" : "−"}${money(Math.abs(diff))}`}</td>}
         </tr>; })}</tbody>
         <tfoot><tr><td><b>Total</b></td>{view.years.map(year => <td key={year}><b>{money(view.totals[year])}</b></td>)}{before && last && <td><b>{money(view.totals[last] - view.totals[before])}</b></td>}</tr></tfoot>
       </table></div>
-      <div className="table-foot"><span>{rows.length} of {view.rows.length} people shown · cash only; gift item prices are not in the sheet</span></div>
+      <div className="table-foot"><span>{rows.length} of {view.rows.length} people shown · total = gifts + cash; a gift with no value entered counts as ₹0</span></div>
     </section>
   </>;
 }

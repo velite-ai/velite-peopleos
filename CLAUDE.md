@@ -626,3 +626,14 @@ Planned years show "planned" under the amount. Values are the cash only (gift it
 
 **Counts by group (Oct 2026):** each gift now carries `group` (the sheet tab it was loaded from, e.g. Workers / Office) inside the sealed details. Compare years shows a head-count and cash table per group and year (people, how many have since left, cash) and a Workers / Office filter.
 Gifts loaded before this have no label: re-paste the same tabs in **Load an earlier year** (tab name `Workers` / `Office`); matching rows are not duplicated, they just get labelled ("get the label" line in the check). Until then they are grouped by the "Workers (village)" / "Office" text in the company field, else "Not labelled".
+
+---
+
+## 31. Gift items and cash kept apart, with a total — Oct 2026
+
+One register record per person and year now holds **several gift items plus cash**: `items` (each with name, quantity, value of one), `cashAmount`, `cashMode` (cash / UPI / bank, optional) and `cashPaidOn` (optional), with **one status** for the whole record.
+`giftValue` (items added up), `totalValue` (gifts + cash) and the one-line `giftItem` summary are worked out on the server (`makeDetails` in `lib/diwali-gifts.ts`, rules in `lib/diwali-gift-rules.ts`, unit tested); `quantity` is kept at 1 and `unitValue` = total for older code.
+- **Older records need no migration:** `openGift` reads the old single-line shape as items + cash (`legacyParts`): "Cash" → cash only; "X + Cash" (how the sheet was loaded) → item X at ₹0 plus the cash; anything else → one item line. Saving an old record in the form stores the new shape.
+- **Screen:** *Add / Edit gift* has a list of gift lines (＋ Add another gift), the gifts total, a cash block (amount, paid by, paid on) and the total value. The list shows items and "Gifts ₹a + Cash ₹b" per person; the top cards show people, total value, gifts value and cash. CSV has separate gift-value, cash, paid-by, paid-on and total columns.
+- A record needs at least one gift item or a cash amount (API 422 otherwise). Import and *Plan next year* write the same shape (plan copies items and cash, not the paid-on date). Compare years shows total with "Gifts + Cash" under it.
+- Gift prices are still not in the sheet, so imported items are at ₹0 until someone edits them.

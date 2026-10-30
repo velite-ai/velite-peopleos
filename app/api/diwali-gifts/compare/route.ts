@@ -12,6 +12,6 @@ export async function GET() {
       allPeople(),
     ]);
     const status = new Map(people.map(person => [person.id, person.status]));
-    return ok({ gifts: rows.map(row => { const gift = toGift(row); return { year: gift.year, status: gift.status, recipientType: gift.recipientType, employeeId: gift.employeeId, recipientName: gift.recipientName, company: gift.company, group: gift.group ?? null, giftItem: gift.giftItem, quantity: gift.quantity, totalValue: gift.totalValue, employeeStatus: gift.employeeId ? status.get(gift.employeeId) ?? null : null }; }) });
+    return ok({ gifts: rows.map(row => { const gift = toGift(row); return { year: gift.year, status: gift.status, recipientType: gift.recipientType, employeeId: gift.employeeId, recipientName: gift.recipientName, company: gift.company, group: gift.group ?? null, giftItem: gift.giftItem, quantity: 1, totalValue: gift.totalValue, giftValue: gift.giftValue, cashAmount: gift.cashAmount, employeeStatus: gift.employeeId ? status.get(gift.employeeId) ?? null : null }; }) });
   } catch (error) { return apiError(error); }
 }

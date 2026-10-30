@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { apiError, ok } from "@/lib/api";
 import { db } from "@/lib/database";
-import { allPeople, giftsOfYear, insertGifts, requireSuperAdmin, sealGift, withTotal } from "@/lib/diwali-gifts";
+import { allPeople, giftsOfYear, insertGifts, requireSuperAdmin, sealGift, makeDetails } from "@/lib/diwali-gifts";
 import { buildGifts, LEFT, nameKey, parseSheet } from "@/lib/diwali-import-rules";
 
 const schema = z.object({ text: z.string().min(1).max(500000), year: z.number().int().min(2000).max(2100), sheet: z.string().trim().min(1).max(60), dryRun: z.boolean() });
@@ -39,7 +39,7 @@ export async function POST(request: Request) {
     });
     const added = await insertGifts(user.id, fresh.map(gift => ({
       year: gift.year, status: gift.status,
-      details: withTotal({ recipientType: gift.recipientType, employeeId: gift.employeeId, recipientName: gift.recipientName, company: gift.company, giftItem: gift.giftItem, quantity: gift.quantity, unitValue: gift.unitValue, vendor: "", billNo: "", givenBy: "", givenOn: null, notes: gift.notes, group: gift.group }),
+      details: makeDetails({ recipientType: gift.recipientType, employeeId: gift.employeeId, recipientName: gift.recipientName, company: gift.company, items: gift.gift ? [{ item: gift.gift, quantity: 1, unitValue: 0 }] : [], cashAmount: gift.cash, cashMode: "", cashPaidOn: null, vendor: "", billNo: "", givenBy: "", givenOn: null, notes: gift.notes, group: gift.group }),
     })));
     return ok({ ...summary, added });
   } catch (error) { return apiError(error); }

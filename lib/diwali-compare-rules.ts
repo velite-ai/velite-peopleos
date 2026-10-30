@@ -4,8 +4,8 @@
  */
 const nameKey = (value: string) => value.toLowerCase().replace(/[^a-z\s]/g, " ").replace(/\s+/g, " ").trim();
 
-export type CompareGift = { year: number; status: string; recipientType: string; employeeId: string | null; recipientName: string; company: string; group?: string | null; giftItem: string; quantity: number; totalValue: number; employeeStatus?: string | null };
-export type YearCell = { items: string[]; value: number; status: string };
+export type CompareGift = { year: number; status: string; recipientType: string; employeeId: string | null; recipientName: string; company: string; group?: string | null; giftItem: string; quantity: number; totalValue: number; giftValue?: number; cashAmount?: number; employeeStatus?: string | null };
+export type YearCell = { items: string[]; value: number; gifts: number; cash: number; status: string };
 export type CompareRow = { key: string; name: string; company: string; group: string; left: boolean; cells: Record<number, YearCell> };
 
 // Workers / Office come from the sheet tab; rows loaded before that was recorded are told apart by the label in the company field.
@@ -27,7 +27,9 @@ export function compareYears(gifts: CompareGift[]) {
     const row = rows.get(key) || { key, name: gift.recipientName, company: gift.company, group: groupOf(gift), left: false, cells: {} };
     if (row.group === "Not labelled" && groupOf(gift) !== "Not labelled") row.group = groupOf(gift);
     if (gift.employeeStatus && LEFT.includes(gift.employeeStatus)) row.left = true;
-    const cell = row.cells[gift.year] || { items: [], value: 0, status: gift.status };
+    const cell = row.cells[gift.year] || { items: [], value: 0, gifts: 0, cash: 0, status: gift.status };
+    cell.gifts += gift.giftValue ?? 0;
+    cell.cash += gift.cashAmount ?? 0;
     cell.items.push(gift.quantity > 1 ? `${gift.quantity} × ${gift.giftItem}` : gift.giftItem);
     cell.value += gift.totalValue;
     if (cell.status !== gift.status) cell.status = "mixed";

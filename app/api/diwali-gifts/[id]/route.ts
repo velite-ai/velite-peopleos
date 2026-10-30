@@ -1,6 +1,6 @@
 import { apiError, fail, ok } from "@/lib/api";
 import { db } from "@/lib/database";
-import { GiftRow, openGift, patchSchema, requireSuperAdmin, resolveRecipient, sealGift, toGift, withTotal } from "@/lib/diwali-gifts";
+import { GiftRow, openGift, patchSchema, requireSuperAdmin, resolveRecipient, sealGift, toGift, makeDetails, hasContent } from "@/lib/diwali-gifts";
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -15,7 +15,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const merged = { ...openGift(current.details_encrypted), ...Object.fromEntries(Object.entries(changes).filter(([, value]) => value !== undefined)) } as ReturnType<typeof openGift>;
     const recipient = await resolveRecipient(merged);
     if (recipient.error) return recipient.error;
-    const details = withTotal({ ...merged, ...recipient.value });
+    const { giftItem: _a, quantity: _b, unitValue: _c, totalValue: _d, giftValue: _e, ...parts } = { ...merged, ...recipient.value };
+    if (!hasContent(parts)) return fail("Add at least one gift item or a cash amount", 422);
+    const details = makeDetails(parts);
     const [row] = await sql.begin(async tx => {
       const rows = await tx<GiftRow[]>`UPDATE diwali_gifts SET details_encrypted=${sealGift(details)},status=${status ?? current.status},updated_by=${user.id},updated_at=now() WHERE id=${id} AND deleted_at IS NULL RETURNING id,gift_year,status,details_encrypted,updated_at`;
       if (rows[0]) await tx`INSERT INTO diwali_gift_events (gift_id,action,actor_user_id) VALUES (${id},'update',${user.id})`;
