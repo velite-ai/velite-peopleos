@@ -5,12 +5,15 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 type Gift = {
   id: string; year: number; status: string; recipientType: "staff" | "other"; employeeId: string | null; recipientName: string; company: string;
-  giftItem: string; quantity: number; unitValue: number; totalValue: number; vendor: string; billNo: string; givenBy: string; givenOn: string | null; notes: string; employeeStatus?: string | null;
+  items: { item: string; quantity: number; unitValue: number }[]; giftValue: number; cashAmount: number; cashMode: string; cashPaidOn: string | null;
+  giftItem: string; totalValue: number; vendor: string; billNo: string; givenBy: string; givenOn: string | null; notes: string; employeeStatus?: string | null;
 };
 const hasLeft = (gift: Gift) => gift.employeeStatus === "separated" || gift.employeeStatus === "archived";
 type StaffOption = { id: string; first_name: string; last_name: string | null; employee_code: string; business_head: string };
 
 const STATUSES: [string, string][] = [["planned", "Planned"], ["bought", "Bought"], ["handed_over", "Handed over"]];
+const CASH_MODES: [string, string][] = [["", "Not stated"], ["cash", "Cash in hand"], ["upi", "UPI"], ["bank", "Bank transfer"]];
+const cashModeLabel = (value: string) => CASH_MODES.find(([key]) => key === value)?.[1] || "";
 const statusLabel = (value: string) => STATUSES.find(([key]) => key === value)?.[1] || value;
 const money = (value: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(value);
 
@@ -47,7 +50,8 @@ export function DiwaliGiftsWorkspace({ flash }: { flash: (message: string) => vo
   const all = gifts || [];
   const visible = all.filter(gift => (statusFilter === "all" || gift.status === statusFilter) && (!search.trim() || `${gift.recipientName} ${gift.company} ${gift.giftItem} ${gift.vendor} ${gift.billNo}`.toLowerCase().includes(search.trim().toLowerCase())));
   const spend = all.reduce((sum, gift) => sum + gift.totalValue, 0);
-  const pieces = all.reduce((sum, gift) => sum + gift.quantity, 0);
+  const giftsValue = all.reduce((sum, gift) => sum + gift.giftValue, 0);
+  const cashValue = all.reduce((sum, gift) => sum + gift.cashAmount, 0);
   const handedOver = all.filter(gift => gift.status === "handed_over").length;
 
   async function changeStatus(gift: Gift, status: string) {
@@ -65,8 +69,8 @@ export function DiwaliGiftsWorkspace({ flash }: { flash: (message: string) => vo
 
   function download() {
     const cell = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""')}"`;
-    const header = ["Recipient", "Company", "Gift", "Quantity", "Value each (INR)", "Total (INR)", "Status", "Bought from", "Bill no.", "Given on", "Given by", "Notes"];
-    const lines = [header, ...visible.map(gift => [gift.recipientName, gift.company, gift.giftItem, gift.quantity, gift.unitValue, gift.totalValue, statusLabel(gift.status), gift.vendor, gift.billNo, gift.givenOn || "", gift.givenBy, gift.notes])].map(line => line.map(cell).join(","));
+    const header = ["Recipient", "Company", "Gift items", "Gifts value (INR)", "Cash (INR)", "Cash paid by", "Cash paid on", "Total (INR)", "Status", "Bought from", "Bill no.", "Given on", "Given by", "Notes"];
+    const lines = [header, ...visible.map(gift => [gift.recipientName, gift.company, gift.items.map(line => `${line.quantity} × ${line.item} @ ${line.unitValue}`).join("; "), gift.giftValue, gift.cashAmount, cashModeLabel(gift.cashMode), gift.cashPaidOn || "", gift.totalValue, statusLabel(gift.status), gift.vendor, gift.billNo, gift.givenOn || "", gift.givenBy, gift.notes])].map(line => line.map(cell).join(","));
     const link = document.createElement("a");
     link.href = URL.createObjectURL(new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" }));
     link.download = `diwali-gifts-${year}.csv`; link.click(); URL.revokeObjectURL(link.href);
@@ -76,18 +80,18 @@ export function DiwaliGiftsWorkspace({ flash }: { flash: (message: string) => vo
     <div className="page-head"><div><span className="eyebrow">Confidential · Super Admin only</span><h1>Diwali gifts</h1><p>Who gets what, what it costs and whether it has been handed over. Nobody else can see this page.</p></div><div className="gift-filters"><button className={view === "compare" ? "primary" : "secondary"} onClick={() => setView(view === "compare" ? "list" : "compare")}>{view === "compare" ? "Back to the list" : "Compare years"}</button><button className="secondary" onClick={() => setTool("import")}>Load an earlier year</button><button className="secondary" onClick={() => setTool("plan")}>Plan {year + 1} from {year}</button><button className="primary" onClick={() => setEditing("new")}>＋ Add gift</button></div></div>
     {view === "compare" ? <DiwaliCompare /> : <>
     <div className="metrics compact">
-      <div className="metric"><div className="metric-icon purple">◎</div><span>GIFTS</span><strong>{all.length}</strong><small>{pieces} pieces in {year}</small></div>
-      <div className="metric"><div className="metric-icon green">₹</div><span>TOTAL SPEND</span><strong>{money(spend)}</strong><small>All gifts for {year}</small></div>
-      <div className="metric"><div className="metric-icon blue">✓</div><span>HANDED OVER</span><strong>{handedOver}</strong><small>of {all.length} gifts</small></div>
-      <div className="metric"><div className="metric-icon orange">!</div><span>STILL TO HAND OVER</span><strong>{all.length - handedOver}</strong><small>Planned or bought</small></div>
+      <div className="metric"><div className="metric-icon purple">◎</div><span>PEOPLE</span><strong>{all.length}</strong><small>{handedOver} handed over · {all.length - handedOver} still to go</small></div>
+      <div className="metric"><div className="metric-icon green">₹</div><span>TOTAL VALUE</span><strong>{money(spend)}</strong><small>Gifts + cash for {year}</small></div>
+      <div className="metric"><div className="metric-icon blue">🎁</div><span>GIFTS</span><strong>{money(giftsValue)}</strong><small>Value of gift items</small></div>
+      <div className="metric"><div className="metric-icon orange">₹</div><span>CASH</span><strong>{money(cashValue)}</strong><small>{all.filter(gift => gift.cashAmount > 0).length} people get cash</small></div>
     </div>
     <section className="panel table-panel">
       <div className="table-tools gift-tools"><div className="gift-filters"><select value={year} onChange={event => setYear(Number(event.target.value))} aria-label="Year">{yearOptions.map(value => <option key={value} value={value}>Diwali {value}</option>)}</select><input type="search" placeholder="Find a name, gift or bill" value={search} onChange={event => setSearch(event.target.value)} aria-label="Find a gift" /><select value={statusFilter} onChange={event => setStatusFilter(event.target.value)} aria-label="Status"><option value="all">All statuses</option>{STATUSES.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></div><button className="secondary" disabled={!visible.length} onClick={download}>⇩ Download this list</button></div>
-      <div className="data-table gift-table"><div className="tr th"><span>RECIPIENT</span><span>GIFT</span><span>VALUE</span><span>STATUS</span><span>GIVEN</span><span></span></div>
+      <div className="data-table gift-table"><div className="tr th"><span>RECIPIENT</span><span>GIFT ITEMS</span><span>TOTAL VALUE</span><span>STATUS</span><span>GIVEN</span><span></span></div>
         {visible.map(gift => <div className="tr" key={gift.id}>
           <span><b>{gift.recipientName}{hasLeft(gift) && <em className="gift-left"> · Has left</em>}<small>{gift.company || (gift.recipientType === "other" ? "Outside Velite" : "")}</small></b></span>
-          <span><b>{gift.giftItem}<small>{gift.quantity} × {money(gift.unitValue)}{gift.vendor ? ` · ${gift.vendor}` : ""}{gift.billNo ? ` · Bill ${gift.billNo}` : ""}</small></b></span>
-          <span><b>{money(gift.totalValue)}</b></span>
+          <span><b>{gift.items.length ? gift.items.map(line => `${line.quantity > 1 ? `${line.quantity} × ` : ""}${line.item}`).join(", ") : "Cash only"}<small>{gift.items.filter(line => line.unitValue > 0).map(line => `${line.item} ${line.quantity} × ${money(line.unitValue)}`).join(" · ")}{gift.vendor ? ` · ${gift.vendor}` : ""}{gift.billNo ? ` · Bill ${gift.billNo}` : ""}</small></b></span>
+          <span><b>{money(gift.totalValue)}</b><small>{gift.giftValue > 0 || gift.cashAmount > 0 ? `Gifts ${money(gift.giftValue)} + Cash ${money(gift.cashAmount)}${gift.cashAmount > 0 && gift.cashMode ? ` (${cashModeLabel(gift.cashMode)})` : ""}` : ""}</small></span>
           <span><select className={`gift-status ${gift.status}`} value={gift.status} onChange={event => changeStatus(gift, event.target.value)} aria-label={`Status for ${gift.recipientName}`}>{STATUSES.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></span>
           <span>{gift.givenOn ? new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(`${gift.givenOn}T00:00:00`)) : "—"}{gift.givenBy && <small>by {gift.givenBy}</small>}</span>
           <span className="gift-actions"><button className="link" onClick={() => setEditing(gift)}>Edit</button><button className="link danger" onClick={() => remove(gift)}>Remove</button></span>
@@ -106,12 +110,15 @@ export function DiwaliGiftsWorkspace({ flash }: { flash: (message: string) => vo
 function GiftForm({ gift, year, onClose, onSaved }: { gift: Gift | null; year: number; onClose: () => void; onSaved: () => void }) {
   const [type, setType] = useState<"staff" | "other">(gift?.recipientType || "staff");
   const [staff, setStaff] = useState<StaffOption[]>([]);
-  const [quantity, setQuantity] = useState(String(gift?.quantity ?? 1));
-  const [unitValue, setUnitValue] = useState(String(gift?.unitValue ?? ""));
+  type Line = { item: string; quantity: string; unitValue: string };
+  const [lines, setLines] = useState<Line[]>(gift?.items.length ? gift.items.map(line => ({ item: line.item, quantity: String(line.quantity), unitValue: String(line.unitValue || "") })) : gift ? [] : [{ item: "", quantity: "1", unitValue: "" }]);
+  const [cash, setCash] = useState(gift?.cashAmount ? String(gift.cashAmount) : "");
+  const setLine = (index: number, change: Partial<Line>) => setLines(current => current.map((line, at) => at === index ? { ...line, ...change } : line));
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   useEffect(() => { fetch("/api/employees").then(response => response.ok ? response.json() : { data: [] }).then(body => setStaff(body.data || [])).catch(() => setStaff([])); }, []);
-  const total = (Number(quantity) || 0) * (Number(unitValue) || 0);
+  const giftTotal = lines.reduce((sum, line) => sum + (Number(line.quantity) || 0) * (Number(line.unitValue) || 0), 0);
+  const total = giftTotal + (Number(cash) || 0);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setBusy(true); setError("");
@@ -119,7 +126,8 @@ function GiftForm({ gift, year, onClose, onSaved }: { gift: Gift | null; year: n
     const text = (name: string) => String(form.get(name) || "").trim();
     const payload = {
       recipientType: type, employeeId: type === "staff" ? text("employeeId") || null : null, recipientName: text("recipientName"), company: text("company"),
-      giftItem: text("giftItem"), quantity: Number(quantity), unitValue: Number(unitValue || 0), vendor: text("vendor"), billNo: text("billNo"),
+      items: lines.filter(line => line.item.trim()).map(line => ({ item: line.item.trim(), quantity: Math.max(1, Math.round(Number(line.quantity) || 1)), unitValue: Number(line.unitValue) || 0 })),
+      cashAmount: Number(cash) || 0, cashMode: text("cashMode"), cashPaidOn: text("cashPaidOn") || null, vendor: text("vendor"), billNo: text("billNo"),
       givenBy: text("givenBy"), givenOn: text("givenOn") || null, notes: text("notes"), status: text("status") || "planned",
     };
     try {
@@ -136,10 +144,21 @@ function GiftForm({ gift, year, onClose, onSaved }: { gift: Gift | null; year: n
         {type === "staff"
           ? <label className="span-two">Staff member<select name="employeeId" required defaultValue={gift?.employeeId || ""}><option value="" disabled>Choose a person…</option>{staff.map(person => <option key={person.id} value={person.id}>{[person.first_name, person.last_name].filter(Boolean).join(" ")} · {person.employee_code} · {person.business_head}</option>)}</select></label>
           : <><label>Name<input name="recipientName" required defaultValue={gift?.recipientType === "other" ? gift.recipientName : ""} /></label><label>Company or relation<input name="company" defaultValue={gift?.recipientType === "other" ? gift.company : ""} placeholder="For example Supplier, Client" /></label></>}
-        <label className="span-two">Gift<input name="giftItem" required defaultValue={gift?.giftItem || ""} placeholder="For example Dry fruit box, Sweets hamper" /></label>
-        <label>Quantity<input type="number" min="1" step="1" required value={quantity} onChange={event => setQuantity(event.target.value)} /></label>
-        <label>Value of one gift (₹)<input type="number" min="0" step="0.01" required value={unitValue} onChange={event => setUnitValue(event.target.value)} /></label>
-        <div className="span-two gift-total">Total: <b>{money(total)}</b></div>
+        <div className="span-two gift-lines"><b>Gift items</b><small> Add each gift with how many and what one costs. Leave the value empty if you do not know it yet.</small>
+          {lines.map((line, index) => <div className="gift-line" key={index}>
+            <input aria-label="Gift" placeholder="For example Blanket, Dry fruit box" value={line.item} onChange={event => setLine(index, { item: event.target.value })} />
+            <input aria-label="Quantity" type="number" min="1" step="1" value={line.quantity} onChange={event => setLine(index, { quantity: event.target.value })} />
+            <input aria-label="Value of one (₹)" type="number" min="0" step="0.01" placeholder="₹ each" value={line.unitValue} onChange={event => setLine(index, { unitValue: event.target.value })} />
+            <span className="gift-line-total">{money((Number(line.quantity) || 0) * (Number(line.unitValue) || 0))}</span>
+            <button type="button" className="link danger" onClick={() => setLines(current => current.filter((_, at) => at !== index))} aria-label="Remove this gift">Remove</button>
+          </div>)}
+          <button type="button" className="secondary" onClick={() => setLines(current => [...current, { item: "", quantity: "1", unitValue: "" }])}>＋ Add another gift</button>
+        </div>
+        <div className="span-two gift-total">Gifts: <b>{money(giftTotal)}</b></div>
+        <label>Cash given (₹)<input type="number" min="0" step="0.01" placeholder="Leave empty if no cash" value={cash} onChange={event => setCash(event.target.value)} /></label>
+        <label>Cash paid by<select name="cashMode" defaultValue={gift?.cashMode || ""}>{CASH_MODES.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
+        <label>Cash paid on<input type="date" name="cashPaidOn" defaultValue={gift?.cashPaidOn || ""} /></label>
+        <div className="span-two gift-total">Total value (gifts + cash): <b>{money(total)}</b></div>
         <label>Status<select name="status" defaultValue={gift?.status || "planned"}>{STATUSES.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label>
         <label>Date given<input type="date" name="givenOn" defaultValue={gift?.givenOn || ""} /></label>
         <label>Bought from<input name="vendor" defaultValue={gift?.vendor || ""} /></label>

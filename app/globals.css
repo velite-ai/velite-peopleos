@@ -283,3 +283,7 @@ html,body{font-family:"Segoe UI",system-ui,-apple-system,Roboto,"Helvetica Neue"
 .gift-compare th, .gift-compare td { padding: 10px 14px; text-align: left; vertical-align: top; border-bottom: 1px solid #e5e7eb; }
 .gift-compare small { display: block; color: #4b5563; font-weight: 400; }
 .gift-compare tfoot td { border-top: 2px solid #9ca3af; }
+
+.gift-lines { display: grid; gap: 8px; }
+.gift-line { display: grid; grid-template-columns: minmax(0, 3fr) 80px 110px 100px auto; gap: 8px; align-items: center; }
+.gift-line-total { font-weight: 600; text-align: right; }

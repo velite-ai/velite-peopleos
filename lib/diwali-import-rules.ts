@@ -10,7 +10,7 @@
 export type SheetRow = { name: string; place: string; gift: string; cash: number; nextCash: number; nextGift: string; note: string };
 export type Candidate = { id: string; name: string; status: string; company?: string };
 export type ImportGift = {
-  recipientType: "staff" | "other"; employeeId: string | null; recipientName: string; company: string; giftItem: string;
+  recipientType: "staff" | "other"; employeeId: string | null; recipientName: string; company: string; giftItem: string; gift: string; cash: number;
   quantity: number; unitValue: number; notes: string; status: "handed_over" | "planned"; year: number; group: string; match: "exact" | "partial" | "none" | "unclear";
 };
 
@@ -74,10 +74,10 @@ export function buildGifts(rows: SheetRow[], year: number, sheetLabel: string, p
     const notes = [row.note, row.place ? `Village / place: ${row.place}` : "", match === "unclear" ? "Several staff share this name; not linked" : "", match === "none" ? "Not linked to a staff record" : "", match === "partial" ? "Linked by part of the name; please check" : ""].filter(Boolean);
     if (row.cash || row.gift) {
       const item = row.gift && row.cash ? `${row.gift} + Cash` : row.gift || "Cash";
-      out.push({ ...base, giftItem: item, quantity: 1, unitValue: row.cash, status: "handed_over", year,
+      out.push({ ...base, giftItem: item, gift: row.gift, cash: row.cash, quantity: 1, unitValue: row.cash, status: "handed_over", year,
         notes: [...notes, row.gift ? "Value is the cash only; the price of the gift items was not in the sheet" : ""].filter(Boolean).join(". "), });
     }
-    if (row.nextCash || row.nextGift) out.push({ ...base, giftItem: row.nextGift && row.nextCash ? `${row.nextGift} + Cash` : row.nextGift || "Cash", quantity: 1, unitValue: row.nextCash, status: "planned", year: year + 1, notes: [...notes, "Planned in the sheet, not yet given"].join(". ") });
+    if (row.nextCash || row.nextGift) out.push({ ...base, giftItem: row.nextGift && row.nextCash ? `${row.nextGift} + Cash` : row.nextGift || "Cash", gift: row.nextGift, cash: row.nextCash, quantity: 1, unitValue: row.nextCash, status: "planned", year: year + 1, notes: [...notes, "Planned in the sheet, not yet given"].join(". ") });
   }
   return out;
 }

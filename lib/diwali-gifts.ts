@@ -2,7 +2,7 @@ import { z } from "zod";
 import { fail } from "./api";
 import { currentUser } from "./auth";
 import { db } from "./database";
-import { GIFT_STATUSES, canUseGiftRegister, giftTotal } from "./diwali-gift-rules";
+import { CASH_MODES, GIFT_STATUSES, GiftLine, canUseGiftRegister, giftSummary, giftTotals, legacyParts } from "./diwali-gift-rules";
 import { openJson, sealJson } from "./encryption";
 
 // Every gift route starts here. Anyone who is not an unrestricted Super Administrator on the allowed list is told the page
@@ -22,27 +22,43 @@ export const giftShape = {
   employeeId: z.uuid().nullable().optional(),
   recipientName: text(160),
   company: text(120),
-  giftItem: text(200).min(1),
-  quantity: z.number().int().min(1).max(100000),
-  unitValue: z.number().min(0).max(100000000),
+  items: z.array(z.object({ item: text(200).min(1), quantity: z.number().int().min(1).max(100000), unitValue: z.number().min(0).max(100000000) })).max(30),
+  cashAmount: z.number().min(0).max(1000000000),
+  cashMode: z.enum(CASH_MODES),
+  cashPaidOn: z.iso.date().nullable(),
   vendor: text(160),
   billNo: text(80),
   givenBy: text(160),
   givenOn: z.iso.date().nullable(),
   notes: text(2000),
 };
-export const createSchema = z.object({ ...giftShape, year: z.number().int().min(2000).max(2100), status: z.enum(GIFT_STATUSES) });
+export const hasContent = (value: { items: GiftLine[]; cashAmount: number }) => value.items.length > 0 || value.cashAmount > 0;
+export const createSchema = z.object({ ...giftShape, year: z.number().int().min(2000).max(2100), status: z.enum(GIFT_STATUSES) }).refine(hasContent, { message: "Add at least one gift item or a cash amount", path: ["items"] });
 export const patchSchema = z.object(giftShape).partial().extend({ status: z.enum(GIFT_STATUSES).optional() });
 
 export type GiftDetails = {
-  recipientType: "staff" | "other"; employeeId: string | null; recipientName: string; company: string; giftItem: string;
-  quantity: number; unitValue: number; totalValue: number; vendor: string; billNo: string; givenBy: string; givenOn: string | null; notes: string;
+  recipientType: "staff" | "other"; employeeId: string | null; recipientName: string; company: string;
+  items: GiftLine[]; giftValue: number; cashAmount: number; cashMode: string; cashPaidOn: string | null;
+  // Kept so lists, search and the comparison keep working: giftItem is the one-line summary, totalValue is gifts + cash.
+  giftItem: string; quantity: number; unitValue: number; totalValue: number; vendor: string; billNo: string; givenBy: string; givenOn: string | null; notes: string;
   group?: string; // which sheet tab the gift came from (Workers / Office); older rows have none
 };
 
 export function sealGift(details: GiftDetails) { return sealJson(details); }
-export function openGift(value: Uint8Array) { return openJson<GiftDetails>(value); }
-export function withTotal(details: Omit<GiftDetails, "totalValue">): GiftDetails { return { ...details, totalValue: giftTotal(details.quantity, details.unitValue) }; }
+type StoredDetails = Omit<GiftDetails, "items" | "giftValue" | "cashAmount" | "cashMode" | "cashPaidOn"> & Partial<Pick<GiftDetails, "items" | "giftValue" | "cashAmount" | "cashMode" | "cashPaidOn">>;
+// Gifts saved before items and cash were kept apart are read into the new shape here, so nothing has to be migrated.
+export function openGift(value: Uint8Array): GiftDetails {
+  const stored = openJson<StoredDetails>(value);
+  if (stored.items) return { ...stored, items: stored.items, giftValue: stored.giftValue ?? giftTotals(stored.items, 0).giftValue, cashAmount: stored.cashAmount ?? 0, cashMode: stored.cashMode ?? "", cashPaidOn: stored.cashPaidOn ?? null };
+  const { items, cashAmount } = legacyParts(stored);
+  return { ...stored, items, giftValue: giftTotals(items, 0).giftValue, cashAmount, cashMode: "", cashPaidOn: null };
+}
+type Parts = Omit<GiftDetails, "giftItem" | "quantity" | "unitValue" | "totalValue" | "giftValue">;
+// Builds what is saved from what was entered: the gift value, the total (gifts + cash) and the one-line summary are worked out here.
+export function makeDetails(parts: Parts): GiftDetails {
+  const totals = giftTotals(parts.items, parts.cashAmount);
+  return { ...parts, cashAmount: totals.cashAmount, giftValue: totals.giftValue, totalValue: totals.totalValue, giftItem: giftSummary(parts.items, totals.cashAmount), quantity: 1, unitValue: totals.totalValue };
+}
 
 export type GiftRow = { id: string; gift_year: number; status: string; details_encrypted: Uint8Array; updated_at: string };
 export function toGift(row: GiftRow) {

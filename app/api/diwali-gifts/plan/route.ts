@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { apiError, ok } from "@/lib/api";
-import { allPeople, giftsOfYear, insertGifts, requireSuperAdmin, withTotal } from "@/lib/diwali-gifts";
+import { allPeople, giftsOfYear, insertGifts, requireSuperAdmin, makeDetails } from "@/lib/diwali-gifts";
 import { planNextYear } from "@/lib/diwali-import-rules";
 
 const schema = z.object({ fromYear: z.number().int().min(2000).max(2099), dryRun: z.boolean() });
@@ -19,7 +19,7 @@ export async function POST(request: Request) {
     if (input.dryRun) return ok(result);
     result.added = await insertGifts(user.id, copy.map(gift => ({
       year: input.fromYear + 1, status: "planned" as const,
-      details: withTotal({ recipientType: gift.recipientType, employeeId: gift.employeeId, recipientName: gift.recipientName, company: gift.company, giftItem: gift.giftItem, quantity: gift.quantity, unitValue: gift.unitValue, vendor: "", billNo: "", givenBy: "", givenOn: null, group: gift.group, notes: `Copied from Diwali ${input.fromYear}${gift.notes ? `. ${gift.notes}` : ""}` }),
+      details: makeDetails({ recipientType: gift.recipientType, employeeId: gift.employeeId, recipientName: gift.recipientName, company: gift.company, items: gift.items, cashAmount: gift.cashAmount, cashMode: gift.cashMode, cashPaidOn: null, vendor: "", billNo: "", givenBy: "", givenOn: null, group: gift.group, notes: `Copied from Diwali ${input.fromYear}${gift.notes ? `. ${gift.notes}` : ""}` }),
     })));
     return ok(result);
   } catch (error) { return apiError(error); }
