@@ -637,3 +637,12 @@ One register record per person and year now holds **several gift items plus cash
 - **Screen:** *Add / Edit gift* has a list of gift lines (＋ Add another gift), the gifts total, a cash block (amount, paid by, paid on) and the total value. The list shows items and "Gifts ₹a + Cash ₹b" per person; the top cards show people, total value, gifts value and cash. CSV has separate gift-value, cash, paid-by, paid-on and total columns.
 - A record needs at least one gift item or a cash amount (API 422 otherwise). Import and *Plan next year* write the same shape (plan copies items and cash, not the paid-on date). Compare years shows total with "Gifts + Cash" under it.
 - Gift prices are still not in the sheet, so imported items are at ₹0 until someone edits them.
+
+---
+
+## 32. Colour layer, Home tiles and a simpler Attendance screen — Nov 2026
+
+- **Colour per area:** `areaSlug()` in `app/page.tsx` puts `data-mod` on each menu button and `data-area` on `<main>`; the "Colour layer" at the end of `app/globals.css` sets `--c` per area (Attendance blue, Leave orange, Salary purple, Staff indigo, Reports cyan, Hiring pink, Joining teal, Leaving rose, Diwali saffron, …). The menu icon chip, active menu row, page heading banner, main button, top-card border and table header all use `--c`. To recolour an area change one line there; new areas default to green.
+- **Home** has five big tiles (Mark attendance, Leave requests, Add a staff member, Salary, Reports) with a live line each (still to mark, waiting, staff count, month state).
+- **Attendance:** date has ◀ ▶ and a day name (a Today button appears off today); the "Import from machine" button (it only showed a message) is gone; month actions (Month summary, send for checking / finalise, return to open, unlock day) are under **Month & more ▾**; **Lock this day** stays visible. Filter chips and the five status buttons are colour-coded; each row has an initials circle and a coloured left edge for its status (not marked = amber). **Who is away** now sits below the list.
+- Checked in a browser against made-up data (Home, Attendance, Salary). No logic or API changes.
