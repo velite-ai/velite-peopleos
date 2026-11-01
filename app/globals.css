@@ -287,3 +287,74 @@ html,body{font-family:"Segoe UI",system-ui,-apple-system,Roboto,"Helvetica Neue"
 .gift-lines { display: grid; gap: 8px; }
 .gift-line { display: grid; grid-template-columns: minmax(0, 3fr) 80px 110px 100px auto; gap: 8px; align-items: center; }
 .gift-line-total { font-weight: 600; text-align: right; }
+
+/* ===== Colour layer (Nov 2026): every area has its own colour, --c ===== */
+[data-mod],main[data-area]{--c:#0f9d6b}
+[data-mod="people"],main[data-area="people"]{--c:#4f46e5}
+[data-mod="daily-attendance"],main[data-area="daily-attendance"]{--c:#2563eb}
+[data-mod="leave-shifts"],main[data-area="leave-shifts"]{--c:#ea7a12}
+[data-mod="payroll"],main[data-area="payroll"]{--c:#7c3aed}
+[data-mod="reports"],main[data-area="reports"]{--c:#0891b2}
+[data-mod="recruitment"],main[data-area="recruitment"]{--c:#db2777}
+[data-mod="onboarding"],main[data-area="onboarding"]{--c:#0d9488}
+[data-mod="separation"],main[data-area="separation"]{--c:#e11d48}
+[data-mod="performance"],main[data-area="performance"]{--c:#d97706}
+[data-mod="learning"],main[data-area="learning"]{--c:#0284c7}
+[data-mod="engagement"],main[data-area="engagement"]{--c:#c026d3}
+[data-mod="hr-calendar"],main[data-area="hr-calendar"]{--c:#65a30d}
+[data-mod="helpdesk"],main[data-area="helpdesk"]{--c:#0f766e}
+[data-mod="my-workspace"],main[data-area="my-workspace"]{--c:#16a34a}
+[data-mod="data-check"],main[data-area="data-check"]{--c:#ca8a04}
+[data-mod="administration"],main[data-area="administration"]{--c:#64748b}
+[data-mod="diwali-gifts"],main[data-area="diwali-gifts"]{--c:#ea580c}
+
+body{background:linear-gradient(180deg,#eef4ff 0,#f7f5fb 320px,#f6f7f5 700px) fixed}
+.sidebar{background:linear-gradient(180deg,#10261d 0,#0f1f2e 100%)}
+.nav-group button svg{box-sizing:content-box;padding:6px;border-radius:10px;background:color-mix(in srgb,var(--c) 30%,transparent);color:color-mix(in srgb,var(--c) 45%,white)}
+.nav-group button:hover{background:#ffffff12}
+.nav-group button.active{background:linear-gradient(90deg,color-mix(in srgb,var(--c) 34%,#10211a),#ffffff0a);box-shadow:inset 4px 0 0 var(--c)}
+.nav-group button.active svg{background:var(--c);color:#fff}
+
+main[data-area] .page-head{background:linear-gradient(115deg,color-mix(in srgb,var(--c) 16%,#fff),#fff 72%);border:1px solid color-mix(in srgb,var(--c) 22%,#fff);border-left:6px solid var(--c);border-radius:16px;padding:18px 22px;margin-bottom:20px}
+main[data-area] .page-head h1{color:color-mix(in srgb,var(--c) 62%,#111)}
+main[data-area] .page-head .eyebrow{color:var(--c)}
+main[data-area] .primary{background:linear-gradient(135deg,var(--c),color-mix(in srgb,var(--c) 68%,#000));border-color:var(--c);color:#fff;box-shadow:0 4px 12px color-mix(in srgb,var(--c) 32%,transparent)}
+main[data-area] .primary:hover:not(:disabled){filter:brightness(1.07)}
+main[data-area] .primary:disabled{box-shadow:none}
+main[data-area] .metric{border-top:4px solid var(--c);border-radius:14px}
+main[data-area] .panel{border-radius:14px}
+main[data-area] .tr.th{background:color-mix(in srgb,var(--c) 8%,#fff)}
+main[data-area] .tr.th>span{color:color-mix(in srgb,var(--c) 60%,#222)}
+.metric-icon.green{background:#d9f5e7;color:#0f8a5a}.metric-icon.blue{background:#dbeafe;color:#1d4ed8}.metric-icon.red{background:#fee2e2;color:#b91c1c}.metric-icon.orange{background:#ffedd5;color:#c2570c}.metric-icon.purple{background:#ede9fe;color:#6d28d9}
+
+/* Home: big tiles for the everyday jobs */
+.quick-tiles{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:22px}
+.quick-tile{display:flex;flex-direction:column;align-items:flex-start;gap:6px;text-align:left;border:0;border-radius:16px;padding:18px;color:#fff;cursor:pointer;background:linear-gradient(135deg,var(--c),color-mix(in srgb,var(--c) 62%,#000));box-shadow:0 8px 20px color-mix(in srgb,var(--c) 30%,transparent);transition:transform .12s ease,box-shadow .12s ease}
+.quick-tile:hover{transform:translateY(-2px);box-shadow:0 12px 26px color-mix(in srgb,var(--c) 40%,transparent)}
+.quick-tile svg{padding:8px;box-sizing:content-box;border-radius:12px;background:#ffffff2e}
+.quick-tile strong{font-size:18px;line-height:1.2}
+.quick-tile small{font-size:14px;color:#ffffffd9}
+@media(max-width:1200px){.quick-tiles{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:760px){.quick-tiles{grid-template-columns:1fr 1fr}}
+.home-stat:nth-child(1){border-top:4px solid #4f46e5}.home-stat:nth-child(2){border-top:4px solid #2563eb}.home-stat:nth-child(3){border-top:4px solid #ea7a12}.home-stat:nth-child(4){border-top:4px solid #0d9488}
+
+/* Attendance: simpler bar, coloured rows */
+.att-date{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.att-date input[type=date]{height:42px;border:1px solid var(--line);border-radius:10px;padding:0 10px;font-size:16px;background:#fff}
+.att-date .step{height:42px;width:42px;border-radius:10px;border:1px solid color-mix(in srgb,var(--c) 40%,#fff);background:color-mix(in srgb,var(--c) 10%,#fff);color:var(--c);font-size:15px;cursor:pointer}
+.att-dayname{font-size:18px;margin:0 6px}.att-end{display:flex;gap:10px;align-items:center}
+.more-menu{position:relative}.more-menu summary{list-style:none;cursor:pointer;height:42px;display:inline-flex;align-items:center;padding:0 14px;border:1px solid var(--line);border-radius:10px;background:#fff;font-weight:600}.more-menu summary::-webkit-details-marker{display:none}
+.more-list{position:absolute;right:0;top:48px;z-index:20;min-width:260px;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 32px #0002;padding:6px;display:grid}
+.more-list button{border:0;background:transparent;text-align:left;padding:11px 12px;border-radius:8px;font-size:15px;cursor:pointer}.more-list button:hover{background:#f1f5f9}
+.att-chips button{border-width:2px}
+.att-chips .chip-present{border-color:#86d3ad;background:#ecfaf3}.att-chips .chip-absent{border-color:#f2a8a8;background:#fff1f1}.att-chips .chip-leave{border-color:#9cc2f2;background:#eef5ff}.att-chips .chip-missing{border-color:#f5c27a;background:#fff6e8}.att-chips .chip-off{border-color:#c4ccd4;background:#f4f6f8}.att-chips .chip-all{border-color:#b9b6f0;background:#f2f1ff}
+.att-chips button.active{color:#fff}.att-chips .chip-present.active{background:#16a06b;border-color:#16a06b}.att-chips .chip-absent.active{background:#dc3b3b;border-color:#dc3b3b}.att-chips .chip-leave.active{background:#2f74d0;border-color:#2f74d0}.att-chips .chip-missing.active{background:#e08a14;border-color:#e08a14}.att-chips .chip-off.active{background:#5b6b7a;border-color:#5b6b7a}.att-chips .chip-all.active{background:#4f46e5;border-color:#4f46e5}
+.att-person{display:flex;align-items:center;gap:12px}.att-avatar{flex:0 0 auto;width:40px;height:40px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-weight:700;font-size:15px;color:#fff;background:#94a3b8}
+.att-row{border-left:5px solid transparent}.att-row.s-present .att-avatar,.att-row.s-work_from_home .att-avatar,.att-row.s-on_duty .att-avatar{background:#16a06b}.att-row.s-present,.att-row.s-work_from_home,.att-row.s-on_duty{border-left-color:#16a06b}
+.att-row.s-absent .att-avatar{background:#dc3b3b}.att-row.s-absent{border-left-color:#dc3b3b;background:#fff8f8}
+.att-row.s-half_day .att-avatar{background:#e08a14}.att-row.s-half_day{border-left-color:#e08a14}
+.att-row.s-paid_leave .att-avatar,.att-row.s-unpaid_leave .att-avatar{background:#2f74d0}.att-row.s-paid_leave,.att-row.s-unpaid_leave{border-left-color:#2f74d0}
+.att-row.s-weekly_off .att-avatar,.att-row.s-holiday .att-avatar{background:#64748b}.att-row.s-weekly_off,.att-row.s-holiday{border-left-color:#64748b}
+.att-row.s-missing{border-left-color:#f0a53a;background:#fffaf1}
+.att-btn{height:38px;border-width:2px}.att-btn.present:hover:not(:disabled){background:#e6f7ef;border-color:#16a06b}.att-btn.absent:hover:not(:disabled){background:#ffeaea;border-color:#dc3b3b}.att-btn.half-day:hover:not(:disabled){background:#fff1dc;border-color:#e08a14}.att-btn.leave:hover:not(:disabled){background:#e8f1ff;border-color:#2f74d0}.att-btn.off:hover:not(:disabled){background:#eef1f4;border-color:#64748b}
+.att-btn.present.on{background:#16a06b;border-color:#16a06b}.att-btn.absent.on{background:#dc3b3b;border-color:#dc3b3b}.att-btn.half-day.on{background:#e08a14;border-color:#e08a14}.att-btn.leave.on{background:#2f74d0;border-color:#2f74d0}.att-btn.off.on{background:#64748b;border-color:#64748b}
+.att-actions .primary{height:44px;font-size:17px;padding:0 22px}
