@@ -41,7 +41,7 @@ export async function POST(request: Request) {
     });
     const added = await insertGifts(user.id, fresh.map(gift => ({
       year: gift.year, status: gift.status,
-      details: makeDetails({ recipientType: gift.recipientType, employeeId: gift.employeeId, recipientName: gift.recipientName, company: gift.company, items: gift.gift ? [{ item: gift.gift, quantity: 1, unitValue: 0 }] : [], cashAmount: gift.cash, cashMode: "", cashPaidOn: null, vendor: "", billNo: "", givenBy: "", givenOn: null, notes: gift.notes, group: gift.group }),
+      details: makeDetails({ recipientType: gift.recipientType, employeeId: gift.employeeId, recipientName: gift.recipientName, company: gift.company, items: gift.items ?? (gift.gift ? [{ item: gift.gift, quantity: 1, unitValue: 0 }] : []), cashAmount: gift.cash, cashMode: "", cashPaidOn: null, vendor: "", billNo: "", givenBy: "", givenOn: null, notes: gift.notes, group: gift.group }),
     })));
     return ok({ ...summary, added });
   } catch (error) { return apiError(error); }

@@ -11,7 +11,7 @@ export type SheetRow = { name: string; place: string; gift: string; cash: number
 export type Candidate = { id: string; name: string; status: string; company?: string };
 export type ImportGift = {
   recipientType: "staff" | "other"; employeeId: string | null; recipientName: string; company: string; giftItem: string; gift: string; cash: number;
-  quantity: number; unitValue: number; notes: string; status: "handed_over" | "planned"; year: number; group: string; match: "exact" | "partial" | "none" | "unclear";
+  quantity: number; unitValue: number; items?: { item: string; quantity: number; unitValue: number }[]; notes: string; status: "handed_over" | "planned"; year: number; group: string; match: "exact" | "partial" | "none" | "unclear";
 };
 
 export const WORKING = ["active", "probation", "notice_period"];
@@ -117,9 +117,20 @@ export function parseParties(text: string): { rows: PartyRow[]; skipped: string[
   return { rows, skipped };
 }
 
+// "2 Comforter + 2 Dry Fruit Box" is two items with two of each; "Dry Fruit" is one item.
+export function partyItems(gift: string) {
+  return gift.split("+").map(part => squash(part)).filter(Boolean).map(part => {
+    const match = /^(\d{1,3})\s*(?:x|×)?\s+(.+)$/i.exec(part);
+    return { item: match ? match[2] : part, quantity: match ? Number(match[1]) : 1, unitValue: 0 };
+  });
+}
+
 export function buildPartyGifts(rows: PartyRow[], year: number, group: string): ImportGift[] {
-  return rows.map(row => ({
-    recipientType: "other" as const, employeeId: null, recipientName: row.name, company: "Franchisee / party", giftItem: row.gift, gift: row.gift, cash: 0,
-    quantity: 1, unitValue: 0, notes: row.note, status: row.status, year, group, match: "none" as const,
-  }));
+  return rows.map(row => {
+    const items = partyItems(row.gift);
+    return {
+      recipientType: "other" as const, employeeId: null, recipientName: row.name, company: "Franchisee / party", giftItem: row.gift, gift: row.gift, cash: 0,
+      quantity: 1, unitValue: 0, items, notes: row.note, status: row.status, year, group, match: "none" as const,
+    };
+  });
 }

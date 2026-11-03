@@ -197,7 +197,7 @@ function ImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (messa
       <div className="form-grid">
         <label className="span-two">What are you loading?<select value={kind} onChange={event => { const next = event.target.value as "workers" | "parties"; setKind(next); setSheet(next === "parties" ? "Parties" : "Workers"); setYear(next === "parties" ? "2026" : "2025"); setResult(null); }}><option value="workers">Staff and workers (Google Sheet tab)</option><option value="parties">Parties: franchisees, distributors, clients (Party, Gift, Status)</option></select></label>
         {kind === "parties"
-          ? <p className="span-two">Paste one party per line with four columns separated by a tab or a | sign: <b>Party name, Gift, Status (Handed over or Planned), Notes</b>. Parties with “No gift” or no gift are left out and listed in the check.</p>
+          ? <p className="span-two">Paste one party per line with four columns separated by a tab or a | sign: <b>Party name, Gift, Status (Handed over or Planned), Notes</b>. A gift can be several items, for example “2 Comforter + 2 Dry Fruit Box”. Parties with “No gift” or no gift are left out and listed in the check.</p>
           : <p className="span-two">Open one tab of the sheet, press Ctrl+A then Ctrl+C, and paste below. Gift is read from column G and cash from column H; column L is next year’s planned cash. Everything else is ignored. Do each tab (Workers, Office) separately.</p>}
         <label>Tab name (kept as a label)<input value={sheet} onChange={event => { setSheet(event.target.value); setResult(null); }} /></label>
         <label>Diwali year<input type="number" value={year} onChange={event => { setYear(event.target.value); setResult(null); }} /></label>

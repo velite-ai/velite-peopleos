@@ -106,3 +106,13 @@ test("a parties list pasted with | signs instead of tabs reads the same", async 
   assert.deepEqual(rows.map(row => [row.name, row.gift, row.status, row.note]), [["N K AGENCY, HANUMANGARH", "Comforter Set", "handed_over", "BOX NO:- 14"]]);
   assert.deepEqual(skipped, ["NEO NEEDS, BANGLORE"]);
 });
+
+test("a party's gift can be several items with quantities", async () => {
+  const { partyItems, parseParties, buildPartyGifts } = await import("../lib/diwali-import-rules.ts");
+  assert.deepEqual(partyItems("2 Comforter + 2 Dry Fruit Box"), [{ item: "Comforter", quantity: 2, unitValue: 0 }, { item: "Dry Fruit Box", quantity: 2, unitValue: 0 }]);
+  assert.deepEqual(partyItems("Dry Fruit"), [{ item: "Dry Fruit", quantity: 1, unitValue: 0 }]);
+  const { rows } = parseParties("RA-VASH WELLNESS PVT. LTD | 2 comforter + 2 dry fruit box | Handed over | ");
+  const [gift] = buildPartyGifts(rows, 2026, "Parties");
+  assert.equal(gift.items.length, 2);
+  assert.equal(gift.items[0].quantity, 2);
+});
