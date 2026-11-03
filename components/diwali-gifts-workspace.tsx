@@ -172,9 +172,10 @@ function GiftForm({ gift, year, onClose, onSaved }: { gift: Gift | null; year: n
   </div>;
 }
 
-type ImportResult = { rows: number; toAdd: number; alreadyThere: number; toLabel: number; byYear: { year: number; gifts: number; value: number }[]; linked: number; notLinked: number; partial: string[]; left: string[]; unclear: string[]; added: number };
+type ImportResult = { skipped: string[]; handed: number; planned: number; rows: number; toAdd: number; alreadyThere: number; toLabel: number; byYear: { year: number; gifts: number; value: number }[]; linked: number; notLinked: number; partial: string[]; left: string[]; unclear: string[]; added: number };
 
 function ImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (message: string, year?: number) => void }) {
+  const [kind, setKind] = useState<"workers" | "parties">("workers");
   const [sheet, setSheet] = useState("Workers");
   const [year, setYear] = useState("2025");
   const [text, setText] = useState("");
@@ -184,7 +185,7 @@ function ImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (messa
   async function run(dryRun: boolean) {
     setBusy(true); setError("");
     try {
-      const data = await bodyData(await fetch("/api/diwali-gifts/import", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text, year: Number(year), sheet, dryRun }) })) as ImportResult;
+      const data = await bodyData(await fetch("/api/diwali-gifts/import", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text, year: Number(year), sheet, kind, dryRun }) })) as ImportResult;
       if (dryRun) setResult(data); else onDone(`${data.added} gifts added${data.toLabel ? `, ${data.toLabel} labelled ${sheet}` : ""}.`, Number(year));
     } catch (problem) { setError((problem as Error).message); }
     setBusy(false);
@@ -194,13 +195,19 @@ function ImportDialog({ onClose, onDone }: { onClose: () => void; onDone: (messa
     <section className="modal" role="dialog" aria-modal="true" aria-labelledby="gift-import-title">
       <div className="modal-head"><div><span className="eyebrow">From your Google Sheet</span><h2 id="gift-import-title">Load an earlier year</h2></div><button onClick={onClose} aria-label="Close">×</button></div>
       <div className="form-grid">
-        <p className="span-two">Open one tab of the sheet, press Ctrl+A then Ctrl+C, and paste below. Gift is read from column G and cash from column H; column L is next year’s planned cash. Everything else is ignored. Do each tab (Workers, Office) separately.</p>
+        <label className="span-two">What are you loading?<select value={kind} onChange={event => { const next = event.target.value as "workers" | "parties"; setKind(next); setSheet(next === "parties" ? "Parties" : "Workers"); setYear(next === "parties" ? "2026" : "2025"); setResult(null); }}><option value="workers">Staff and workers (Google Sheet tab)</option><option value="parties">Parties: franchisees, distributors, clients (Party, Gift, Status)</option></select></label>
+        {kind === "parties"
+          ? <p className="span-two">Paste one party per line with four columns separated by a tab or a | sign: <b>Party name, Gift, Status (Handed over or Planned), Notes</b>. Parties with “No gift” or no gift are left out and listed in the check.</p>
+          : <p className="span-two">Open one tab of the sheet, press Ctrl+A then Ctrl+C, and paste below. Gift is read from column G and cash from column H; column L is next year’s planned cash. Everything else is ignored. Do each tab (Workers, Office) separately.</p>}
         <label>Tab name (kept as a label)<input value={sheet} onChange={event => { setSheet(event.target.value); setResult(null); }} /></label>
         <label>Diwali year<input type="number" value={year} onChange={event => { setYear(event.target.value); setResult(null); }} /></label>
         <label className="span-two">Pasted sheet<textarea rows={8} value={text} onChange={event => { setText(event.target.value); setResult(null); }} placeholder="Paste here" /></label>
         {result && <div className="span-two">
           <p><b>{result.toAdd}</b> gifts will be added ({result.alreadyThere} already in the register are skipped{result.toLabel > 0 ? `; ${result.toLabel} of those get the “${sheet}” label so they can be counted by group` : ""}). {result.byYear.map(item => `Diwali ${item.year}: ${item.gifts} gifts, cash ${money(item.value)}`).join(" · ")}.</p>
-          <p>{result.linked} are linked to a staff record; {result.notLinked} are not (one-word names and people not found are saved by name only).</p>
+          {kind === "parties"
+            ? <p>{result.handed} handed over · {result.planned} planned.{result.skipped.length > 0 ? ` Left out (no gift): ${result.skipped.length}.` : ""}</p>
+            : <p>{result.linked} are linked to a staff record; {result.notLinked} are not (one-word names and people not found are saved by name only).</p>}
+          {kind === "parties" && result.skipped.length > 0 && <p><b>No gift, not added:</b> {names(result.skipped)}</p>}
           {result.left.length > 0 && <p><b>Have since left:</b> {names(result.left)}</p>}
           {result.partial.length > 0 && <p><b>Linked by part of the name (check):</b> {names(result.partial)}</p>}
           {result.unclear.length > 0 && <p><b>Several staff share the name, not linked:</b> {names(result.unclear)}</p>}

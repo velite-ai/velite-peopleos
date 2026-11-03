@@ -97,3 +97,29 @@ export function planNextYear<T extends { recipientName: string; employeeId: stri
   }
   return { copy, left, already };
 }
+
+// ---- Parties (franchisees, distributors, clients) ----
+// Pasted as (columns separated by a tab, or by a | sign): Party name <tab> Gift <tab> Status (Handed over / Planned) <tab> Notes. Colours do not survive copy and paste, so the status is written out.
+export type PartyRow = { name: string; gift: string; status: "handed_over" | "planned"; note: string };
+const titleCase = (value: string) => squash(value).toLowerCase().replace(/(^|[\s(/.-])\p{L}/gu, c => c.toUpperCase());
+const NO_GIFT = /^(no gift|none|-)?$/i;
+
+export function parseParties(text: string): { rows: PartyRow[]; skipped: string[] } {
+  const rows: PartyRow[] = [], skipped: string[] = [];
+  for (const line of text.split(/\r?\n/)) {
+    const cells = (line.includes("\t") ? line.split("\t") : line.split("|")).map(cell => squash(cell.replace(/^"|"$/g, "")));
+    const name = cells[0] || "";
+    if (!name || /^party\s*name$/i.test(name)) continue;
+    const gift = cells[1] || "";
+    if (NO_GIFT.test(gift)) { skipped.push(squash(name)); continue; }
+    rows.push({ name: squash(name), gift: titleCase(gift), status: /hand|given|green|done/i.test(cells[2] || "") ? "handed_over" : "planned", note: cells[3] || "" });
+  }
+  return { rows, skipped };
+}
+
+export function buildPartyGifts(rows: PartyRow[], year: number, group: string): ImportGift[] {
+  return rows.map(row => ({
+    recipientType: "other" as const, employeeId: null, recipientName: row.name, company: "Franchisee / party", giftItem: row.gift, gift: row.gift, cash: 0,
+    quantity: 1, unitValue: 0, notes: row.note, status: row.status, year, group, match: "none" as const,
+  }));
+}
