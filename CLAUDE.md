@@ -646,3 +646,11 @@ One register record per person and year now holds **several gift items plus cash
 - **Home** has five big tiles (Mark attendance, Leave requests, Add a staff member, Salary, Reports) with a live line each (still to mark, waiting, staff count, month state).
 - **Attendance:** date has ◀ ▶ and a day name (a Today button appears off today); the "Import from machine" button (it only showed a message) is gone; month actions (Month summary, send for checking / finalise, return to open, unlock day) are under **Month & more ▾**; **Lock this day** stays visible. Filter chips and the five status buttons are colour-coded; each row has an initials circle and a coloured left edge for its status (not marked = amber). **Who is away** now sits below the list.
 - Checked in a browser against made-up data (Home, Attendance, Salary). No logic or API changes.
+
+---
+
+## 33. Loading parties (franchisees, distributors, clients) into the Diwali register — Nov 2026
+
+**Load an earlier year** has a first choice, *What are you loading?*: **Staff and workers** (the Google Sheet tab, §28) or **Parties**. Parties are pasted as four columns separated by a tab or a `|` sign: **Party name, Gift, Status (Handed over / Planned), Notes** (`parseParties` / `buildPartyGifts` in `lib/diwali-import-rules.ts`, `kind: "parties"` on `POST /api/diwali-gifts/import`). Colours do not survive copy and paste, so the status is written out (green rows in the Diwali 2026 sheet = Handed over, the rest = Planned).
+Each party becomes a "Someone else" record (company "Franchisee / party", group = the label, default *Parties*) with the gift as one item at ₹0 (no prices in the sheet) and no cash. Rows with "NO GIFT" or no gift are **not** added; the check lists them. Not matched to staff. Re-running skips rows already there.
+A party's gift may list several items with quantities, joined by `+` (`partyItems`): "2 Comforter + 2 Dry Fruit Box" becomes two items, two of each.

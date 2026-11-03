@@ -86,3 +86,33 @@ test("column M is next year's planned gift; a planned gift with no cash is kept,
   assert.deepEqual(gifts.map(gift => [gift.recipientName, gift.giftItem, gift.unitValue]), [["SARITA DEVI", "Blanket + Cash", 23000], ["PARMINDER KAUR", "Blanket", 0]]);
   assert.equal(gifts[0].status, "planned");
 });
+
+test("a parties list keeps the party and gift, takes the status from the third column and leaves out 'no gift'", async () => {
+  const { parseParties, buildPartyGifts } = await import("../lib/diwali-import-rules.ts");
+  const text = ["Party name\tGift\tStatus\tNotes", "N K AGENCY, HANUMANGARH\tCOMFORTER SET\tHanded over\tBOX NO:- 14", "NEO NEEDS, BANGLORE\tDRY FRUIT\tPlanned\t", "KMR PHARMA, NELLORE\tNO GIFT\tHanded over\tNO GIFT", "WINGS PHARMA, ALIGARH\t\tPlanned\t", "GLOW PHARMA, JAIPUR\tdry fruit\t\t"].join("\n");
+  const { rows, skipped } = parseParties(text);
+  assert.deepEqual(rows.map(row => [row.name, row.gift, row.status]), [["N K AGENCY, HANUMANGARH", "Comforter Set", "handed_over"], ["NEO NEEDS, BANGLORE", "Dry Fruit", "planned"], ["GLOW PHARMA, JAIPUR", "Dry Fruit", "planned"]]);
+  assert.deepEqual(skipped, ["KMR PHARMA, NELLORE", "WINGS PHARMA, ALIGARH"]);
+  const gifts = buildPartyGifts(rows, 2026, "Parties");
+  assert.equal(gifts[0].recipientType, "other");
+  assert.equal(gifts[0].year, 2026);
+  assert.equal(gifts[0].group, "Parties");
+  assert.equal(gifts[0].cash, 0);
+});
+
+test("a parties list pasted with | signs instead of tabs reads the same", async () => {
+  const { parseParties } = await import("../lib/diwali-import-rules.ts");
+  const { rows, skipped } = parseParties("Party name | Gift | Status | Notes\nN K AGENCY, HANUMANGARH | COMFORTER SET | Handed over | BOX NO:- 14\nNEO NEEDS, BANGLORE | NO GIFT | Planned |");
+  assert.deepEqual(rows.map(row => [row.name, row.gift, row.status, row.note]), [["N K AGENCY, HANUMANGARH", "Comforter Set", "handed_over", "BOX NO:- 14"]]);
+  assert.deepEqual(skipped, ["NEO NEEDS, BANGLORE"]);
+});
+
+test("a party's gift can be several items with quantities", async () => {
+  const { partyItems, parseParties, buildPartyGifts } = await import("../lib/diwali-import-rules.ts");
+  assert.deepEqual(partyItems("2 Comforter + 2 Dry Fruit Box"), [{ item: "Comforter", quantity: 2, unitValue: 0 }, { item: "Dry Fruit Box", quantity: 2, unitValue: 0 }]);
+  assert.deepEqual(partyItems("Dry Fruit"), [{ item: "Dry Fruit", quantity: 1, unitValue: 0 }]);
+  const { rows } = parseParties("RA-VASH WELLNESS PVT. LTD | 2 comforter + 2 dry fruit box | Handed over | ");
+  const [gift] = buildPartyGifts(rows, 2026, "Parties");
+  assert.equal(gift.items.length, 2);
+  assert.equal(gift.items[0].quantity, 2);
+});
