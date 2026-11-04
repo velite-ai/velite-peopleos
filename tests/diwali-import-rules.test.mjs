@@ -116,3 +116,10 @@ test("a party's gift can be several items with quantities", async () => {
   assert.equal(gift.items.length, 2);
   assert.equal(gift.items[0].quantity, 2);
 });
+
+test("a parties list can carry the Velite company in a fifth column", async () => {
+  const { parseParties, buildPartyGifts } = await import("../lib/diwali-import-rules.ts");
+  const { rows } = parseParties("N K AGENCY | COMFORTER SET | Handed over | BOX 14 | Velite Healthcare\nNEO NEEDS | DRY FRUIT | Planned | |");
+  assert.deepEqual(rows.map(row => row.firm), ["Velite Healthcare", ""]);
+  assert.equal(buildPartyGifts(rows, 2026, "Parties")[0].firm, "Velite Healthcare");
+});

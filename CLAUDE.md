@@ -675,3 +675,12 @@ A party's gift may list several items with quantities, joined by `+` (`partyItem
 - **Fill prices into a year:** the master tab has *Check what would change* / *Apply to Diwali {year}*. It puts the master price on every gift line that has no price (or, with the second check, replaces entered prices too) and recalculates each person's gifts value and total (logged in `diwali_gift_events`). Names are matched ignoring case and extra spaces.
 - **New loads pick up master prices:** Load an earlier year (staff and parties) gives items the master price when the name matches.
 - The master tab also offers *Add them to the master* for gift names used in the year but not yet in the master (price 0 until entered).
+
+---
+
+## 36. Company-wise Diwali data — Nov 2026
+
+Every gift now has a **Velite company** (`firm` in the sealed details): Velite Healthcare, Velite India, Velite Pharmaceuticals, Velite Sciences Pvt Ltd, Others 1, Others 2 (the active business heads, in that order; `orderCompanies` in the workspace).
+- **Staff** gifts count under the staff member's own company (the `company` of the linked record); **parties** (franchisees, distributors, clients) need the company chosen: in *Add / Edit gift* ("Velite company giving this gift"), in bulk (tick people in the List, **Set company…**), or in a 5th column when loading parties (`Party | Gift | Status | Notes | Company`). Gifts with none show as **Company not set**.
+- `firmLabel` / `firmSummary` in `lib/diwali-analysis-rules.ts` (unit tested). The **company box** beside the year box filters the List and the **By gift & analysis** tab (cards, gift-wise table, status, group, print and PDF all follow it); the analysis also has a **By company** table (people, handed over, to go, gifts, cash, total) and it is section 3 of the PDF.
+- Not done: Compare years is not split by company.

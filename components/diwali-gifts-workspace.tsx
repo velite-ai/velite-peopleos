@@ -3,13 +3,13 @@
 import { DiwaliCompare } from "@/components/diwali-compare";
 import { DiwaliItems } from "@/components/diwali-items";
 import { DiwaliMaster, MasterGift } from "@/components/diwali-master";
-import { CASH_KEY, NO_GIFT_KEY, filterGifts, groupLabel, itemOptions, statusSummary, totalsOf } from "@/lib/diwali-analysis-rules";
+import { CASH_KEY, NO_FIRM, NO_GIFT_KEY, filterGifts, firmLabel, groupLabel, itemOptions, statusSummary, totalsOf } from "@/lib/diwali-analysis-rules";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 type Gift = {
   id: string; year: number; status: string; recipientType: "staff" | "other"; employeeId: string | null; recipientName: string; company: string;
   items: { item: string; quantity: number; unitValue: number }[]; giftValue: number; cashAmount: number; cashMode: string; cashPaidOn: string | null;
-  group?: string | null; giftItem: string; totalValue: number; vendor: string; billNo: string; givenBy: string; givenOn: string | null; notes: string; employeeStatus?: string | null;
+  group?: string | null; firm?: string | null; giftItem: string; totalValue: number; vendor: string; billNo: string; givenBy: string; givenOn: string | null; notes: string; employeeStatus?: string | null;
 };
 const hasLeft = (gift: Gift) => gift.employeeStatus === "separated" || gift.employeeStatus === "archived";
 type StaffOption = { id: string; first_name: string; last_name: string | null; employee_code: string; business_head: string };
@@ -19,6 +19,10 @@ const CASH_MODES: [string, string][] = [["", "Not stated"], ["cash", "Cash in ha
 const cashModeLabel = (value: string) => CASH_MODES.find(([key]) => key === value)?.[1] || "";
 const statusLabel = (value: string) => STATUSES.find(([key]) => key === value)?.[1] || value;
 const money = (value: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(value);
+
+// Velite's companies in the order the team uses them; anything else follows alphabetically.
+const COMPANY_ORDER = ["healthcare", "india", "pharmaceuticals", "sciences", "others 1", "others 2"];
+const orderCompanies = (names: string[]) => [...names].sort((a, b) => { const rank = (name: string) => { const at = COMPANY_ORDER.findIndex(key => name.toLowerCase().includes(key)); return at < 0 ? 99 : at; }; return rank(a) - rank(b) || a.localeCompare(b); });
 
 async function bodyData(response: Response) {
   const body = await response.json().catch(() => null);
@@ -39,6 +43,9 @@ export function DiwaliGiftsWorkspace({ flash }: { flash: (message: string) => vo
   const [view, setView] = useState<"list" | "items" | "master" | "compare">("list");
   const [itemFilter, setItemFilter] = useState("all");
   const [groupFilter, setGroupFilter] = useState("all");
+  const [companyFilter, setCompanyFilter] = useState("all");
+  const [companyNames, setCompanyNames] = useState<string[]>([]);
+  useEffect(() => { fetch("/api/business-heads").then(response => response.ok ? response.json() : { data: [] }).then(body => setCompanyNames(orderCompanies((body.data || []).map((row: { name: string }) => row.name)))).catch(() => setCompanyNames([])); }, []);
   const [selected, setSelected] = useState<string[]>([]);
   const [tool, setTool] = useState<"import" | "plan" | null>(null);
 
@@ -53,19 +60,21 @@ export function DiwaliGiftsWorkspace({ flash }: { flash: (message: string) => vo
   useEffect(() => load(), [load, refresh]);
 
   const yearOptions = useMemo(() => [...new Set([...years, thisYear, thisYear + 1, year])].sort((a, b) => b - a), [years, thisYear, year]);
-  const all = gifts || [];
+  const everyone = gifts || [];
+  const companyOptions = useMemo(() => { const present = new Set(everyone.map(firmLabel)); return [...companyNames, ...[...present].filter(name => !companyNames.includes(name) && name !== NO_FIRM), ...(present.has(NO_FIRM) ? [NO_FIRM] : [])]; }, [everyone, companyNames]);
+  const all = useMemo(() => filterGifts(everyone, { status: "all", item: "all", group: "all", search: "", firm: companyFilter }) as Gift[], [everyone, companyFilter]);
   const visible = filterGifts(all, { status: statusFilter, item: itemFilter, group: groupFilter, search }) as Gift[];
   const itemChoices = useMemo(() => itemOptions(all), [all]);
   const groupChoices = useMemo(() => [...new Set(all.map(groupLabel))].sort(), [all]);
   const byStatus = useMemo(() => statusSummary(all), [all]);
   const shown = totalsOf(visible);
-  const filterText = [statusFilter !== "all" ? `Status: ${statusLabel(statusFilter)}` : "", itemFilter !== "all" ? `Gift: ${itemFilter === CASH_KEY ? "Cash" : itemFilter === NO_GIFT_KEY ? "No gift items" : itemChoices.find(choice => choice.key === itemFilter)?.label || itemFilter}` : "", groupFilter !== "all" ? `Group: ${groupFilter}` : "", search.trim() ? `Search: ${search.trim()}` : ""].filter(Boolean).join(" · ") || "All gifts";
+  const filterText = [companyFilter !== "all" ? `Company: ${companyFilter}` : "", statusFilter !== "all" ? `Status: ${statusLabel(statusFilter)}` : "", itemFilter !== "all" ? `Gift: ${itemFilter === CASH_KEY ? "Cash" : itemFilter === NO_GIFT_KEY ? "No gift items" : itemChoices.find(choice => choice.key === itemFilter)?.label || itemFilter}` : "", groupFilter !== "all" ? `Group: ${groupFilter}` : "", search.trim() ? `Search: ${search.trim()}` : ""].filter(Boolean).join(" · ") || "All gifts";
   const spend = all.reduce((sum, gift) => sum + gift.totalValue, 0);
   const giftsValue = all.reduce((sum, gift) => sum + gift.giftValue, 0);
   const cashValue = all.reduce((sum, gift) => sum + gift.cashAmount, 0);
   const handedOver = all.filter(gift => gift.status === "handed_over").length;
 
-  useEffect(() => { setSelected([]); }, [year, statusFilter, itemFilter, groupFilter, search]);
+  useEffect(() => { setSelected([]); }, [year, statusFilter, itemFilter, groupFilter, companyFilter, search]);
   const selectedVisible = visible.filter(gift => selected.includes(gift.id));
   async function markSelected(status: string) {
     if (!selectedVisible.length) return;
@@ -74,6 +83,15 @@ export function DiwaliGiftsWorkspace({ flash }: { flash: (message: string) => vo
     const failed = results.filter(result => result.status === "rejected").length;
     setSelected([]); setRefresh(value => value + 1);
     flash(failed ? `${results.length - failed} updated, ${failed} could not be changed.` : `${results.length} marked ${statusLabel(status)}.`);
+  }
+
+  async function setCompanyOfSelected(firm: string) {
+    if (!selectedVisible.length || !firm) return;
+    if (!window.confirm(`Set the company to ${firm} for ${selectedVisible.length} ${selectedVisible.length === 1 ? "person" : "people"}?`)) return;
+    const results = await Promise.allSettled(selectedVisible.map(gift => fetch(`/api/diwali-gifts/${gift.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ firm }) }).then(response => response.ok ? true : Promise.reject())));
+    const failed = results.filter(result => result.status === "rejected").length;
+    setSelected([]); setRefresh(value => value + 1);
+    flash(failed ? `${results.length - failed} updated, ${failed} could not be changed.` : `Company set to ${firm} for ${results.length}.`);
   }
 
   async function pdf() {
@@ -109,8 +127,8 @@ export function DiwaliGiftsWorkspace({ flash }: { flash: (message: string) => vo
 
   return <>
     <div className="page-head gift-noprint"><div><span className="eyebrow">Confidential · Super Admin only</span><h1>Diwali gifts</h1><p>Who gets what, what it costs and whether it has been handed over. Nobody else can see this page.</p></div><div className="gift-filters"><button className="secondary" onClick={() => setTool("import")}>Load an earlier year</button><button className="secondary" onClick={() => setTool("plan")}>Plan {year + 1} from {year}</button><button className="primary" onClick={() => setEditing("new")}>＋ Add gift</button></div></div>
-    <div className="gift-tabs gift-noprint" role="tablist">{([["list", "List"], ["items", "By gift & analysis"], ["master", "Gift master"], ["compare", "Compare years"]] as const).map(([key, label]) => <button key={key} role="tab" aria-selected={view === key} className={view === key ? "active" : ""} onClick={() => setView(key)}>{label}</button>)}{view !== "compare" && <select className="gift-year" value={year} onChange={event => setYear(Number(event.target.value))} aria-label="Year">{yearOptions.map(value => <option key={value} value={value}>Diwali {value}</option>)}</select>}</div>
-    {view === "compare" ? <DiwaliCompare /> : view === "master" ? <DiwaliMaster year={year} gifts={all} flash={flash} onChanged={() => setRefresh(value => value + 1)} /> : view === "items" ? <DiwaliItems year={year} gifts={all} flash={flash} /> : <>
+    <div className="gift-tabs gift-noprint" role="tablist">{([["list", "List"], ["items", "By gift & analysis"], ["master", "Gift master"], ["compare", "Compare years"]] as const).map(([key, label]) => <button key={key} role="tab" aria-selected={view === key} className={view === key ? "active" : ""} onClick={() => setView(key)}>{label}</button>)}{view !== "compare" && view !== "master" && <select className="gift-year gift-company" value={companyFilter} onChange={event => setCompanyFilter(event.target.value)} aria-label="Company"><option value="all">All companies</option>{companyOptions.map(name => <option key={name} value={name}>{name}</option>)}</select>}{view !== "compare" && <select className="gift-year" value={year} onChange={event => setYear(Number(event.target.value))} aria-label="Year">{yearOptions.map(value => <option key={value} value={value}>Diwali {value}</option>)}</select>}</div>
+    {view === "compare" ? <DiwaliCompare /> : view === "master" ? <DiwaliMaster year={year} gifts={all} flash={flash} onChanged={() => setRefresh(value => value + 1)} /> : view === "items" ? <DiwaliItems year={year} gifts={all} companyName={companyFilter === "all" ? "" : companyFilter} companyOrder={companyNames} flash={flash} /> : <>
     <div className="gift-print-title"><h1>Diwali gifts {year}</h1><p>{filterText} · Confidential</p></div>
     <div className="metrics compact">
       <div className="metric"><div className="metric-icon purple">◎</div><span>PEOPLE</span><strong>{all.length}</strong><small>{handedOver} handed over · {all.length - handedOver} still to go</small></div>
@@ -127,11 +145,11 @@ export function DiwaliGiftsWorkspace({ flash }: { flash: (message: string) => vo
         <select value={itemFilter} onChange={event => setItemFilter(event.target.value)} aria-label="Gift"><option value="all">All gifts</option>{itemChoices.map(choice => <option key={choice.key} value={choice.key}>{choice.key === CASH_KEY ? "Cash only / with cash" : choice.label}</option>)}<option value={NO_GIFT_KEY}>No gift items (cash only)</option></select>
         {groupChoices.length > 1 && <select value={groupFilter} onChange={event => setGroupFilter(event.target.value)} aria-label="Group"><option value="all">All groups</option>{groupChoices.map(name => <option key={name} value={name}>{name}</option>)}</select>}
       </div><div className="gift-filters"><button className="secondary" disabled={!visible.length} onClick={() => window.print()}>🖨 Print</button><button className="secondary" disabled={!visible.length} onClick={pdf}>⇩ PDF</button><button className="secondary" disabled={!visible.length} onClick={download}>⇩ Excel</button></div></div>
-      {selectedVisible.length > 0 && <div className="gift-noprint gift-bulk"><b>{selectedVisible.length} selected</b><button className="primary" onClick={() => markSelected("handed_over")}>✓ Mark as Handed over</button><button className="secondary" onClick={() => markSelected("bought")}>Mark as Bought</button><button className="secondary" onClick={() => markSelected("planned")}>Mark as Planned</button><button className="link" onClick={() => setSelected([])}>Clear</button></div>}
+      {selectedVisible.length > 0 && <div className="gift-noprint gift-bulk"><b>{selectedVisible.length} selected</b><button className="primary" onClick={() => markSelected("handed_over")}>✓ Mark as Handed over</button><button className="secondary" onClick={() => markSelected("bought")}>Mark as Bought</button><button className="secondary" onClick={() => markSelected("planned")}>Mark as Planned</button><select aria-label="Set company" value="" onChange={event => setCompanyOfSelected(event.target.value)}><option value="">Set company…</option>{companyNames.map(name => <option key={name} value={name}>{name}</option>)}</select><button className="link" onClick={() => setSelected([])}>Clear</button></div>}
       <div className="data-table gift-table"><div className="tr th"><span className="gift-noprint"><input type="checkbox" aria-label="Select all shown" checked={visible.length > 0 && selectedVisible.length === visible.length} onChange={event => setSelected(event.target.checked ? visible.map(gift => gift.id) : [])} /></span><span>RECIPIENT</span><span>GIFT ITEMS</span><span>GIFTS VALUE</span><span>CASH</span><span>TOTAL</span><span>STATUS</span><span className="gift-noprint"></span></div>
         {visible.map(gift => <div className={`tr ${selected.includes(gift.id) ? "picked" : ""}`} key={gift.id}>
           <span className="gift-noprint"><input type="checkbox" aria-label={`Select ${gift.recipientName}`} checked={selected.includes(gift.id)} onChange={event => setSelected(current => event.target.checked ? [...current, gift.id] : current.filter(id => id !== gift.id))} /></span>
-          <span><b>{gift.recipientName}{hasLeft(gift) && <em className="gift-left"> · Has left</em>}<small>{gift.company || (gift.recipientType === "other" ? "Outside Velite" : "")}{gift.notes ? ` · ${gift.notes}` : ""}</small></b></span>
+          <span><b>{gift.recipientName}{hasLeft(gift) && <em className="gift-left"> · Has left</em>}<small><span className={`gift-firm ${firmLabel(gift) === NO_FIRM ? "unset" : ""}`}>{firmLabel(gift)}</span>{gift.recipientType === "other" && gift.company ? ` · ${gift.company}` : ""}{gift.notes ? ` · ${gift.notes}` : ""}</small></b></span>
           <span><b>{gift.items.length ? gift.items.map(line => `${line.quantity > 1 ? `${line.quantity} × ` : ""}${line.item}`).join(", ") : "Cash only"}<small>{gift.items.filter(line => line.unitValue > 0).map(line => `${line.item} ${line.quantity} × ${money(line.unitValue)}`).join(" · ")}{gift.vendor ? ` · ${gift.vendor}` : ""}{gift.billNo ? ` · Bill ${gift.billNo}` : ""}</small></b></span>
           <span>{gift.giftValue > 0 ? money(gift.giftValue) : "—"}</span>
           <span>{gift.cashAmount > 0 ? <>{money(gift.cashAmount)}{gift.cashMode && <small>{cashModeLabel(gift.cashMode)}</small>}</> : "—"}</span>
@@ -147,11 +165,11 @@ export function DiwaliGiftsWorkspace({ flash }: { flash: (message: string) => vo
     </>}
     {tool === "import" && <ImportDialog onClose={() => setTool(null)} onDone={(message, y) => { setTool(null); if (y) setYear(y); setRefresh(value => value + 1); flash(message); }} />}
     {tool === "plan" && <PlanDialog year={year} onClose={() => setTool(null)} onDone={message => { setTool(null); setYear(year + 1); setRefresh(value => value + 1); flash(message); }} />}
-    {editing && <GiftForm gift={editing === "new" ? null : editing} year={year} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); setRefresh(value => value + 1); flash("Gift saved."); }} />}
+    {editing && <GiftForm gift={editing === "new" ? null : editing} year={year} companies={companyNames} onClose={() => setEditing(null)} onSaved={() => { setEditing(null); setRefresh(value => value + 1); flash("Gift saved."); }} />}
   </>;
 }
 
-function GiftForm({ gift, year, onClose, onSaved }: { gift: Gift | null; year: number; onClose: () => void; onSaved: () => void }) {
+function GiftForm({ gift, year, companies, onClose, onSaved }: { gift: Gift | null; year: number; companies: string[]; onClose: () => void; onSaved: () => void }) {
   const [type, setType] = useState<"staff" | "other">(gift?.recipientType || "staff");
   const [staff, setStaff] = useState<StaffOption[]>([]);
   type Line = { item: string; quantity: string; unitValue: string; other?: boolean };
@@ -177,7 +195,7 @@ function GiftForm({ gift, year, onClose, onSaved }: { gift: Gift | null; year: n
     const form = new FormData(event.currentTarget);
     const text = (name: string) => String(form.get(name) || "").trim();
     const payload = {
-      recipientType: type, employeeId: type === "staff" ? text("employeeId") || null : null, recipientName: text("recipientName"), company: text("company"),
+      recipientType: type, employeeId: type === "staff" ? text("employeeId") || null : null, recipientName: text("recipientName"), company: text("company"), firm: type === "other" ? text("firm") : undefined,
       items: lines.filter(line => line.item.trim()).map(line => ({ item: line.item.trim(), quantity: Math.max(1, Math.round(Number(line.quantity) || 1)), unitValue: Number(line.unitValue) || 0 })),
       cashAmount: Number(cash) || 0, cashMode: text("cashMode"), cashPaidOn: text("cashPaidOn") || null, vendor: text("vendor"), billNo: text("billNo"),
       givenBy: text("givenBy"), givenOn: text("givenOn") || null, notes: text("notes"), status: text("status") || "planned",
@@ -194,8 +212,8 @@ function GiftForm({ gift, year, onClose, onSaved }: { gift: Gift | null; year: n
       <form onSubmit={submit} className="form-grid">
         <div className="span-two gift-type"><label><input type="radio" checked={type === "staff"} onChange={() => setType("staff")} /> Velite staff member</label><label><input type="radio" checked={type === "other"} onChange={() => setType("other")} /> Someone else (client, vendor, other)</label></div>
         {type === "staff"
-          ? <label className="span-two">Staff member<select name="employeeId" required defaultValue={gift?.employeeId || ""}><option value="" disabled>Choose a person…</option>{staff.map(person => <option key={person.id} value={person.id}>{[person.first_name, person.last_name].filter(Boolean).join(" ")} · {person.employee_code} · {person.business_head}</option>)}</select></label>
-          : <><label>Name<input name="recipientName" required defaultValue={gift?.recipientType === "other" ? gift.recipientName : ""} /></label><label>Company or relation<input name="company" defaultValue={gift?.recipientType === "other" ? gift.company : ""} placeholder="For example Supplier, Client" /></label></>}
+          ? <label className="span-two">Staff member (the gift is counted under their company)<select name="employeeId" required defaultValue={gift?.employeeId || ""}><option value="" disabled>Choose a person…</option>{staff.map(person => <option key={person.id} value={person.id}>{[person.first_name, person.last_name].filter(Boolean).join(" ")} · {person.employee_code} · {person.business_head}</option>)}</select></label>
+          : <><label>Name<input name="recipientName" required defaultValue={gift?.recipientType === "other" ? gift.recipientName : ""} /></label><label>Company or relation<input name="company" defaultValue={gift?.recipientType === "other" ? gift.company : ""} placeholder="For example Supplier, Client" /></label><label className="span-two">Velite company giving this gift<select name="firm" defaultValue={gift?.firm || ""}><option value="">Not set yet</option>{companies.map(name => <option key={name} value={name}>{name}</option>)}</select></label></>}
         <div className="span-two gift-lines"><b>Gift items</b><small> Choose each gift from the Gift master: its price comes in by itself and the value is worked out from how many. You can still change a price for one person.</small>
           {lines.map((line, index) => <div className="gift-line" key={index}>
             <span className="gift-pick">

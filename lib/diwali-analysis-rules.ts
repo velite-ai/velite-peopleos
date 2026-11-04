@@ -4,7 +4,7 @@
  */
 
 export type AnalysisGift = {
-  id: string; status: string; recipientName: string; company: string; group?: string | null;
+  id: string; status: string; recipientType?: string; recipientName: string; company: string; group?: string | null; firm?: string | null;
   items: { item: string; quantity: number; unitValue: number }[]; giftValue: number; cashAmount: number; totalValue: number; employeeStatus?: string | null;
 };
 export const STATUS_ORDER = ["planned", "bought", "handed_over"] as const;
@@ -18,6 +18,10 @@ export const groupLabel = (gift: Pick<AnalysisGift, "group" | "company">) => {
   const match = /^(workers|office)\b/i.exec(gift.company.trim());
   return match ? match[1][0].toUpperCase() + match[1].slice(1).toLowerCase() : "Not labelled";
 };
+
+export const NO_FIRM = "Company not set";
+// The Velite company that gives the gift: the one chosen on the gift, else a staff member's own company.
+export const firmLabel = (gift: Pick<AnalysisGift, "firm" | "recipientType" | "company">) => (gift.firm && gift.firm.trim()) || (gift.recipientType === "staff" && gift.company.trim() ? gift.company.trim() : NO_FIRM);
 
 export const totalsOf = (gifts: AnalysisGift[]) => ({
   people: gifts.length,
@@ -74,12 +78,13 @@ export function groupSummary(gifts: AnalysisGift[]) {
 
 export const topRecipients = (gifts: AnalysisGift[], count = 10) => [...gifts].sort((a, b) => b.totalValue - a.totalValue || a.recipientName.localeCompare(b.recipientName)).slice(0, count);
 
-export type Filters = { status: string; item: string; group: string; search: string };
+export type Filters = { status: string; item: string; group: string; search: string; firm?: string };
 export function filterGifts(gifts: AnalysisGift[], filters: Filters) {
   const needle = filters.search.trim().toLowerCase();
   return gifts.filter(gift => {
     if (filters.status !== "all" && gift.status !== filters.status) return false;
     if (filters.group !== "all" && groupLabel(gift) !== filters.group) return false;
+    if (filters.firm && filters.firm !== "all" && firmLabel(gift) !== filters.firm) return false;
     if (filters.item !== "all") {
       const has = filters.item === CASH_KEY ? gift.cashAmount > 0 : filters.item === NO_GIFT_KEY ? gift.items.length === 0 : gift.items.some(line => itemKey(line.item) === filters.item);
       if (!has) return false;
@@ -94,4 +99,13 @@ export const itemOptions = (gifts: AnalysisGift[]) => itemSummary(gifts).map(row
 export function yearChange(now: AnalysisGift[], before: AnalysisGift[]) {
   const a = totalsOf(now), b = totalsOf(before);
   return { now: a, before: b, diff: { people: a.people - b.people, giftValue: a.giftValue - b.giftValue, cash: a.cash - b.cash, total: a.total - b.total } };
+}
+
+// Company-wise totals: people, handed over, still to go, gifts value, cash, total.
+export function firmSummary(gifts: AnalysisGift[], order: string[] = []) {
+  const names = [...new Set([...order.filter(name => gifts.some(gift => firmLabel(gift) === name)), ...gifts.map(firmLabel)])];
+  return names.map(firm => {
+    const own = gifts.filter(gift => firmLabel(gift) === firm);
+    return { firm, ...totalsOf(own), handed: own.filter(isDone).length, pending: own.filter(gift => !isDone(gift)).length };
+  });
 }
