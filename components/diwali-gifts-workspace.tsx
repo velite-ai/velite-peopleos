@@ -1,12 +1,14 @@
 "use client";
 
 import { DiwaliCompare } from "@/components/diwali-compare";
+import { DiwaliItems } from "@/components/diwali-items";
+import { CASH_KEY, NO_GIFT_KEY, filterGifts, groupLabel, itemOptions, statusSummary, totalsOf } from "@/lib/diwali-analysis-rules";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 type Gift = {
   id: string; year: number; status: string; recipientType: "staff" | "other"; employeeId: string | null; recipientName: string; company: string;
   items: { item: string; quantity: number; unitValue: number }[]; giftValue: number; cashAmount: number; cashMode: string; cashPaidOn: string | null;
-  giftItem: string; totalValue: number; vendor: string; billNo: string; givenBy: string; givenOn: string | null; notes: string; employeeStatus?: string | null;
+  group?: string | null; giftItem: string; totalValue: number; vendor: string; billNo: string; givenBy: string; givenOn: string | null; notes: string; employeeStatus?: string | null;
 };
 const hasLeft = (gift: Gift) => gift.employeeStatus === "separated" || gift.employeeStatus === "archived";
 type StaffOption = { id: string; first_name: string; last_name: string | null; employee_code: string; business_head: string };
@@ -33,7 +35,10 @@ export function DiwaliGiftsWorkspace({ flash }: { flash: (message: string) => vo
   const [statusFilter, setStatusFilter] = useState("all");
   const [editing, setEditing] = useState<Gift | "new" | null>(null);
   const [refresh, setRefresh] = useState(0);
-  const [view, setView] = useState<"list" | "compare">("list");
+  const [view, setView] = useState<"list" | "items" | "compare">("list");
+  const [itemFilter, setItemFilter] = useState("all");
+  const [groupFilter, setGroupFilter] = useState("all");
+  const [selected, setSelected] = useState<string[]>([]);
   const [tool, setTool] = useState<"import" | "plan" | null>(null);
 
   const load = useCallback(() => {
@@ -48,11 +53,36 @@ export function DiwaliGiftsWorkspace({ flash }: { flash: (message: string) => vo
 
   const yearOptions = useMemo(() => [...new Set([...years, thisYear, thisYear + 1, year])].sort((a, b) => b - a), [years, thisYear, year]);
   const all = gifts || [];
-  const visible = all.filter(gift => (statusFilter === "all" || gift.status === statusFilter) && (!search.trim() || `${gift.recipientName} ${gift.company} ${gift.giftItem} ${gift.vendor} ${gift.billNo}`.toLowerCase().includes(search.trim().toLowerCase())));
+  const visible = filterGifts(all, { status: statusFilter, item: itemFilter, group: groupFilter, search }) as Gift[];
+  const itemChoices = useMemo(() => itemOptions(all), [all]);
+  const groupChoices = useMemo(() => [...new Set(all.map(groupLabel))].sort(), [all]);
+  const byStatus = useMemo(() => statusSummary(all), [all]);
+  const shown = totalsOf(visible);
+  const filterText = [statusFilter !== "all" ? `Status: ${statusLabel(statusFilter)}` : "", itemFilter !== "all" ? `Gift: ${itemFilter === CASH_KEY ? "Cash" : itemFilter === NO_GIFT_KEY ? "No gift items" : itemChoices.find(choice => choice.key === itemFilter)?.label || itemFilter}` : "", groupFilter !== "all" ? `Group: ${groupFilter}` : "", search.trim() ? `Search: ${search.trim()}` : ""].filter(Boolean).join(" · ") || "All gifts";
   const spend = all.reduce((sum, gift) => sum + gift.totalValue, 0);
   const giftsValue = all.reduce((sum, gift) => sum + gift.giftValue, 0);
   const cashValue = all.reduce((sum, gift) => sum + gift.cashAmount, 0);
   const handedOver = all.filter(gift => gift.status === "handed_over").length;
+
+  useEffect(() => { setSelected([]); }, [year, statusFilter, itemFilter, groupFilter, search]);
+  const selectedVisible = visible.filter(gift => selected.includes(gift.id));
+  async function markSelected(status: string) {
+    if (!selectedVisible.length) return;
+    if (!window.confirm(`Mark ${selectedVisible.length} ${selectedVisible.length === 1 ? "person" : "people"} as ${statusLabel(status)}?`)) return;
+    const results = await Promise.allSettled(selectedVisible.map(gift => fetch(`/api/diwali-gifts/${gift.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ status }) }).then(response => response.ok ? true : Promise.reject())));
+    const failed = results.filter(result => result.status === "rejected").length;
+    setSelected([]); setRefresh(value => value + 1);
+    flash(failed ? `${results.length - failed} updated, ${failed} could not be changed.` : `${results.length} marked ${statusLabel(status)}.`);
+  }
+
+  async function pdf() {
+    try {
+      const [{ buildTablePdf }, { listBlocks }] = await Promise.all([import("@/lib/table-pdf"), import("@/lib/diwali-report")]);
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(new Blob([buildTablePdf(listBlocks(year, visible, filterText), `Diwali gifts ${year}`) as BlobPart], { type: "application/pdf" }));
+      link.download = `diwali-gifts-${year}.pdf`; link.click(); URL.revokeObjectURL(link.href);
+    } catch { flash("The PDF could not be made."); }
+  }
 
   async function changeStatus(gift: Gift, status: string) {
     const before = gifts;
@@ -77,8 +107,10 @@ export function DiwaliGiftsWorkspace({ flash }: { flash: (message: string) => vo
   }
 
   return <>
-    <div className="page-head"><div><span className="eyebrow">Confidential · Super Admin only</span><h1>Diwali gifts</h1><p>Who gets what, what it costs and whether it has been handed over. Nobody else can see this page.</p></div><div className="gift-filters"><button className={view === "compare" ? "primary" : "secondary"} onClick={() => setView(view === "compare" ? "list" : "compare")}>{view === "compare" ? "Back to the list" : "Compare years"}</button><button className="secondary" onClick={() => setTool("import")}>Load an earlier year</button><button className="secondary" onClick={() => setTool("plan")}>Plan {year + 1} from {year}</button><button className="primary" onClick={() => setEditing("new")}>＋ Add gift</button></div></div>
-    {view === "compare" ? <DiwaliCompare /> : <>
+    <div className="page-head gift-noprint"><div><span className="eyebrow">Confidential · Super Admin only</span><h1>Diwali gifts</h1><p>Who gets what, what it costs and whether it has been handed over. Nobody else can see this page.</p></div><div className="gift-filters"><button className="secondary" onClick={() => setTool("import")}>Load an earlier year</button><button className="secondary" onClick={() => setTool("plan")}>Plan {year + 1} from {year}</button><button className="primary" onClick={() => setEditing("new")}>＋ Add gift</button></div></div>
+    <div className="gift-tabs gift-noprint" role="tablist">{([["list", "List"], ["items", "By gift & analysis"], ["compare", "Compare years"]] as const).map(([key, label]) => <button key={key} role="tab" aria-selected={view === key} className={view === key ? "active" : ""} onClick={() => setView(key)}>{label}</button>)}{view !== "compare" && <select className="gift-year" value={year} onChange={event => setYear(Number(event.target.value))} aria-label="Year">{yearOptions.map(value => <option key={value} value={value}>Diwali {value}</option>)}</select>}</div>
+    {view === "compare" ? <DiwaliCompare /> : view === "items" ? <DiwaliItems year={year} gifts={all} flash={flash} /> : <>
+    <div className="gift-print-title"><h1>Diwali gifts {year}</h1><p>{filterText} · Confidential</p></div>
     <div className="metrics compact">
       <div className="metric"><div className="metric-icon purple">◎</div><span>PEOPLE</span><strong>{all.length}</strong><small>{handedOver} handed over · {all.length - handedOver} still to go</small></div>
       <div className="metric"><div className="metric-icon green">₹</div><span>TOTAL VALUE</span><strong>{money(spend)}</strong><small>Gifts + cash for {year}</small></div>
@@ -86,19 +118,30 @@ export function DiwaliGiftsWorkspace({ flash }: { flash: (message: string) => vo
       <div className="metric"><div className="metric-icon orange">₹</div><span>CASH</span><strong>{money(cashValue)}</strong><small>{all.filter(gift => gift.cashAmount > 0).length} people get cash</small></div>
     </div>
     <section className="panel table-panel">
-      <div className="table-tools gift-tools"><div className="gift-filters"><select value={year} onChange={event => setYear(Number(event.target.value))} aria-label="Year">{yearOptions.map(value => <option key={value} value={value}>Diwali {value}</option>)}</select><input type="search" placeholder="Find a name, gift or bill" value={search} onChange={event => setSearch(event.target.value)} aria-label="Find a gift" /><select value={statusFilter} onChange={event => setStatusFilter(event.target.value)} aria-label="Status"><option value="all">All statuses</option>{STATUSES.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></div><button className="secondary" disabled={!visible.length} onClick={download}>⇩ Download this list</button></div>
-      <div className="data-table gift-table"><div className="tr th"><span>RECIPIENT</span><span>GIFT ITEMS</span><span>TOTAL VALUE</span><span>STATUS</span><span>GIVEN</span><span></span></div>
-        {visible.map(gift => <div className="tr" key={gift.id}>
-          <span><b>{gift.recipientName}{hasLeft(gift) && <em className="gift-left"> · Has left</em>}<small>{gift.company || (gift.recipientType === "other" ? "Outside Velite" : "")}</small></b></span>
-          <span><b>{gift.items.length ? gift.items.map(line => `${line.quantity > 1 ? `${line.quantity} × ` : ""}${line.item}`).join(", ") : "Cash only"}<small>{gift.items.filter(line => line.unitValue > 0).map(line => `${line.item} ${line.quantity} × ${money(line.unitValue)}`).join(" · ")}{gift.vendor ? ` · ${gift.vendor}` : ""}{gift.billNo ? ` · Bill ${gift.billNo}` : ""}</small></b></span>
-          <span><b>{money(gift.totalValue)}</b><small>{gift.giftValue > 0 || gift.cashAmount > 0 ? `Gifts ${money(gift.giftValue)} + Cash ${money(gift.cashAmount)}${gift.cashAmount > 0 && gift.cashMode ? ` (${cashModeLabel(gift.cashMode)})` : ""}` : ""}</small></span>
-          <span><select className={`gift-status ${gift.status}`} value={gift.status} onChange={event => changeStatus(gift, event.target.value)} aria-label={`Status for ${gift.recipientName}`}>{STATUSES.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></span>
-          <span>{gift.givenOn ? new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(`${gift.givenOn}T00:00:00`)) : "—"}{gift.givenBy && <small>by {gift.givenBy}</small>}</span>
-          <span className="gift-actions"><button className="link" onClick={() => setEditing(gift)}>Edit</button><button className="link danger" onClick={() => remove(gift)}>Remove</button></span>
-        </div>)}
-        {gifts === null ? <div className="empty-state padded">Loading…</div> : error ? <div className="empty-state padded">{error}</div> : !visible.length && <div className="empty-state padded">{all.length ? "No gifts match this search." : `No gifts recorded for Diwali ${year} yet. Click “Add gift” to start.`}</div>}
+      <div className="gift-noprint gift-chips" role="group" aria-label="Show gifts that are">
+        {([["all", "All", all.length], ["planned", "Planned", byStatus.planned.people], ["bought", "Bought", byStatus.bought.people], ["handed_over", "Handed over", byStatus.handed_over.people]] as [string, string, number][]).map(([key, label, count]) => <button key={key} className={`chip-${key} ${statusFilter === key ? "active" : ""}`} onClick={() => setStatusFilter(key)}>{label} <b>{count}</b></button>)}
       </div>
-      <div className="table-foot"><span>{visible.length} of {all.length} gifts shown · Amounts and names are stored encrypted</span></div>
+      <div className="table-tools gift-tools gift-noprint"><div className="gift-filters">
+        <input type="search" placeholder="Find a name or gift" value={search} onChange={event => setSearch(event.target.value)} aria-label="Find a gift" />
+        <select value={itemFilter} onChange={event => setItemFilter(event.target.value)} aria-label="Gift"><option value="all">All gifts</option>{itemChoices.map(choice => <option key={choice.key} value={choice.key}>{choice.key === CASH_KEY ? "Cash only / with cash" : choice.label}</option>)}<option value={NO_GIFT_KEY}>No gift items (cash only)</option></select>
+        {groupChoices.length > 1 && <select value={groupFilter} onChange={event => setGroupFilter(event.target.value)} aria-label="Group"><option value="all">All groups</option>{groupChoices.map(name => <option key={name} value={name}>{name}</option>)}</select>}
+      </div><div className="gift-filters"><button className="secondary" disabled={!visible.length} onClick={() => window.print()}>🖨 Print</button><button className="secondary" disabled={!visible.length} onClick={pdf}>⇩ PDF</button><button className="secondary" disabled={!visible.length} onClick={download}>⇩ Excel</button></div></div>
+      {selectedVisible.length > 0 && <div className="gift-noprint gift-bulk"><b>{selectedVisible.length} selected</b><button className="primary" onClick={() => markSelected("handed_over")}>✓ Mark as Handed over</button><button className="secondary" onClick={() => markSelected("bought")}>Mark as Bought</button><button className="secondary" onClick={() => markSelected("planned")}>Mark as Planned</button><button className="link" onClick={() => setSelected([])}>Clear</button></div>}
+      <div className="data-table gift-table"><div className="tr th"><span className="gift-noprint"><input type="checkbox" aria-label="Select all shown" checked={visible.length > 0 && selectedVisible.length === visible.length} onChange={event => setSelected(event.target.checked ? visible.map(gift => gift.id) : [])} /></span><span>RECIPIENT</span><span>GIFT ITEMS</span><span>GIFTS VALUE</span><span>CASH</span><span>TOTAL</span><span>STATUS</span><span className="gift-noprint"></span></div>
+        {visible.map(gift => <div className={`tr ${selected.includes(gift.id) ? "picked" : ""}`} key={gift.id}>
+          <span className="gift-noprint"><input type="checkbox" aria-label={`Select ${gift.recipientName}`} checked={selected.includes(gift.id)} onChange={event => setSelected(current => event.target.checked ? [...current, gift.id] : current.filter(id => id !== gift.id))} /></span>
+          <span><b>{gift.recipientName}{hasLeft(gift) && <em className="gift-left"> · Has left</em>}<small>{gift.company || (gift.recipientType === "other" ? "Outside Velite" : "")}{gift.notes ? ` · ${gift.notes}` : ""}</small></b></span>
+          <span><b>{gift.items.length ? gift.items.map(line => `${line.quantity > 1 ? `${line.quantity} × ` : ""}${line.item}`).join(", ") : "Cash only"}<small>{gift.items.filter(line => line.unitValue > 0).map(line => `${line.item} ${line.quantity} × ${money(line.unitValue)}`).join(" · ")}{gift.vendor ? ` · ${gift.vendor}` : ""}{gift.billNo ? ` · Bill ${gift.billNo}` : ""}</small></b></span>
+          <span>{gift.giftValue > 0 ? money(gift.giftValue) : "—"}</span>
+          <span>{gift.cashAmount > 0 ? <>{money(gift.cashAmount)}{gift.cashMode && <small>{cashModeLabel(gift.cashMode)}</small>}</> : "—"}</span>
+          <span><b>{money(gift.totalValue)}</b></span>
+          <span><select className={`gift-status ${gift.status}`} value={gift.status} onChange={event => changeStatus(gift, event.target.value)} aria-label={`Status for ${gift.recipientName}`}>{STATUSES.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select><em className="gift-status-print">{statusLabel(gift.status)}</em>{gift.givenOn && <small>{new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(`${gift.givenOn}T00:00:00`))}{gift.givenBy ? ` · ${gift.givenBy}` : ""}</small>}</span>
+          <span className="gift-actions gift-noprint"><button className="link" onClick={() => setEditing(gift)}>Edit</button><button className="link danger" onClick={() => remove(gift)}>Remove</button></span>
+        </div>)}
+        {visible.length > 0 && <div className="tr gift-total-row"><span className="gift-noprint"></span><span><b>Total · {visible.length} {visible.length === 1 ? "person" : "people"}</b></span><span></span><span><b>{money(shown.giftValue)}</b></span><span><b>{money(shown.cash)}</b></span><span><b>{money(shown.total)}</b></span><span></span><span className="gift-noprint"></span></div>}
+        {gifts === null ? <div className="empty-state padded">Loading…</div> : error ? <div className="empty-state padded">{error}</div> : !visible.length && <div className="empty-state padded">{all.length ? "No gifts match these choices." : `No gifts recorded for Diwali ${year} yet. Click “Add gift” to start.`}</div>}
+      </div>
+      <div className="table-foot gift-noprint"><span>{visible.length} of {all.length} shown · {filterText} · Amounts and names are stored encrypted</span></div>
     </section>
     </>}
     {tool === "import" && <ImportDialog onClose={() => setTool(null)} onDone={(message, y) => { setTool(null); if (y) setYear(y); setRefresh(value => value + 1); flash(message); }} />}

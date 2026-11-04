@@ -358,3 +358,32 @@ main[data-area] .tr.th>span{color:color-mix(in srgb,var(--c) 60%,#222)}
 .att-btn{height:38px;border-width:2px}.att-btn.present:hover:not(:disabled){background:#e6f7ef;border-color:#16a06b}.att-btn.absent:hover:not(:disabled){background:#ffeaea;border-color:#dc3b3b}.att-btn.half-day:hover:not(:disabled){background:#fff1dc;border-color:#e08a14}.att-btn.leave:hover:not(:disabled){background:#e8f1ff;border-color:#2f74d0}.att-btn.off:hover:not(:disabled){background:#eef1f4;border-color:#64748b}
 .att-btn.present.on{background:#16a06b;border-color:#16a06b}.att-btn.absent.on{background:#dc3b3b;border-color:#dc3b3b}.att-btn.half-day.on{background:#e08a14;border-color:#e08a14}.att-btn.leave.on{background:#2f74d0;border-color:#2f74d0}.att-btn.off.on{background:#64748b;border-color:#64748b}
 .att-actions .primary{height:44px;font-size:17px;padding:0 22px}
+
+/* Diwali gifts: tabs, status chips, bulk bar, gift-wise analysis and printing */
+.gift-tabs{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px}.gift-tabs button{height:42px;padding:0 18px;border:2px solid color-mix(in srgb,var(--c) 30%,#fff);background:#fff;border-radius:21px;font-size:16px;font-weight:600;cursor:pointer;color:#33413a}.gift-tabs button.active{background:var(--c);border-color:var(--c);color:#fff}.gift-year{margin-left:auto;height:42px;border:1px solid var(--line);border-radius:10px;padding:0 12px;background:#fff;font-size:16px}
+.gift-chips{display:flex;gap:8px;flex-wrap:wrap;padding:14px 18px 4px}.gift-chips button{height:38px;padding:0 16px;border:2px solid #cbd2cc;background:#fff;border-radius:19px;font-size:15px;cursor:pointer}.gift-chips button b{margin-left:6px}
+.gift-chips .chip-all{border-color:#b9b6f0;background:#f2f1ff}.gift-chips .chip-planned{border-color:#f5c27a;background:#fff6e8}.gift-chips .chip-bought{border-color:#9cc2f2;background:#eef5ff}.gift-chips .chip-handed_over{border-color:#86d3ad;background:#ecfaf3}
+.gift-chips button.active{color:#fff}.gift-chips .chip-all.active{background:#4f46e5;border-color:#4f46e5}.gift-chips .chip-planned.active{background:#e08a14;border-color:#e08a14}.gift-chips .chip-bought.active{background:#2f74d0;border-color:#2f74d0}.gift-chips .chip-handed_over.active{background:#16a06b;border-color:#16a06b}
+.gift-bulk{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 18px;background:#fff7ed;border-top:1px solid #fed7aa;border-bottom:1px solid #fed7aa}
+.gift-table .tr{grid-template-columns:34px 1.4fr 1.9fr .9fr .9fr .9fr 1.1fr 100px}.gift-table .tr.picked{background:#fff9f0}.gift-table .tr small{display:block;color:#4b5563;font-weight:400}
+.gift-total-row{background:color-mix(in srgb,var(--c) 8%,#fff);border-top:2px solid color-mix(in srgb,var(--c) 40%,#fff)}
+.gift-status-print,.gift-print-title{display:none}
+.gift-pill{display:inline-block;padding:3px 10px;border-radius:12px;font-size:14px;font-weight:600}.gift-pill.planned{background:#fff0de;color:#9a5b0b}.gift-pill.bought{background:#e8f1fa;color:#1f5d94}.gift-pill.handed_over{background:#e5f4eb;color:#1f6b4d}
+.gift-actions-bar{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:14px}.gift-actions-bar span:last-child{display:flex;gap:8px}
+.gift-progress{position:relative;height:30px;border-radius:15px;background:#e5eae7;margin:0 0 18px;overflow:hidden}.gift-progress i{position:absolute;inset:0 auto 0 0;background:linear-gradient(90deg,#16a06b,#34d399)}.gift-progress span{position:relative;display:block;line-height:30px;text-align:center;font-weight:600;color:#10261d}
+.gift-two{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}@media(max-width:1050px){.gift-two{grid-template-columns:1fr}}
+.gift-items-table .gift-item-row{cursor:pointer}.gift-items-table .gift-item-row:hover{background:#fff7ed}.gift-item-detail{display:none}.gift-item-detail.open{display:table-row}.gift-item-detail ul{margin:6px 0 0;padding-left:18px}.gift-item-detail li small{margin-left:8px}.gift-item-detail .muted{color:#6b7280}
+@media print{
+  @page{size:A4 landscape;margin:12mm}
+  html,body{background:#fff!important}
+  .sidebar,.topbar,.gift-noprint,.toast,.mobile-menu{display:none!important}
+  .app-shell{display:block!important}main{padding:0!important;margin:0!important;display:block!important}
+  .gift-print-title{display:block;margin-bottom:10px}.gift-print-title h1{font-size:20px;margin:0}.gift-print-title p{margin:2px 0 0;color:#444}
+  .panel,.metric{box-shadow:none!important;border:1px solid #999!important}.metric{break-inside:avoid}.table-panel,.panel{break-inside:auto!important}.gift-compare tr,.gift-table .tr{break-inside:avoid}.gift-two{grid-template-columns:1fr 1fr!important}.gift-progress{print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  .metrics{margin:0 0 10px!important}
+  .gift-table .tr{grid-template-columns:1.4fr 1.9fr .9fr .9fr .9fr 1fr!important;break-inside:avoid;font-size:11px}
+  .gift-status,.gift-year{display:none!important}.gift-status-print{display:inline!important;font-style:normal}
+  .gift-item-detail{display:table-row!important}.gift-item-row{break-inside:avoid}
+  .gift-compare-wrap{overflow:visible!important}.data-table{overflow:visible!important}
+}
+.gift-item-detail li small{display:inline!important}
