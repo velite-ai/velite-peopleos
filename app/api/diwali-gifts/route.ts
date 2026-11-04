@@ -27,7 +27,7 @@ export async function POST(request: Request) {
     const recipient = await resolveRecipient(input);
     if (recipient.error) return recipient.error;
     const { year, status } = input;
-    const details = makeDetails({ ...recipient.value, items: input.items, cashAmount: input.cashAmount, cashMode: input.cashMode, cashPaidOn: input.cashPaidOn, vendor: input.vendor, billNo: input.billNo, givenBy: input.givenBy, givenOn: input.givenOn, notes: input.notes });
+    const details = makeDetails({ ...recipient.value, items: input.items, cashAmount: input.cashAmount, cashMode: input.cashMode, cashPaidOn: input.cashPaidOn, vendor: input.vendor, billNo: input.billNo, givenBy: input.givenBy, givenOn: input.givenOn, notes: input.notes, firm: input.firm || (recipient.value.recipientType === "staff" ? recipient.value.company : "") });
     const sql = db();
     const [row] = await sql.begin(async tx => {
       const rows = await tx<GiftRow[]>`INSERT INTO diwali_gifts (gift_year,status,details_encrypted,created_by,updated_by) VALUES (${year},${status},${sealGift(details)},${user.id},${user.id}) RETURNING id,gift_year,status,details_encrypted,updated_at`;

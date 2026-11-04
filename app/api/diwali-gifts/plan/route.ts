@@ -19,7 +19,7 @@ export async function POST(request: Request) {
     if (input.dryRun) return ok(result);
     result.added = await insertGifts(user.id, copy.map(gift => ({
       year: input.fromYear + 1, status: "planned" as const,
-      details: makeDetails({ recipientType: gift.recipientType, employeeId: gift.employeeId, recipientName: gift.recipientName, company: gift.company, items: gift.items, cashAmount: gift.cashAmount, cashMode: gift.cashMode, cashPaidOn: null, vendor: "", billNo: "", givenBy: "", givenOn: null, group: gift.group, notes: `Copied from Diwali ${input.fromYear}${gift.notes ? `. ${gift.notes}` : ""}` }),
+      details: makeDetails({ recipientType: gift.recipientType, employeeId: gift.employeeId, recipientName: gift.recipientName, company: gift.company, items: gift.items, cashAmount: gift.cashAmount, cashMode: gift.cashMode, cashPaidOn: null, vendor: "", billNo: "", givenBy: "", givenOn: null, group: gift.group, firm: gift.firm, notes: `Copied from Diwali ${input.fromYear}${gift.notes ? `. ${gift.notes}` : ""}` }),
     })));
     return ok(result);
   } catch (error) { return apiError(error); }

@@ -1,14 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { AnalysisGift, CASH_KEY, groupSummary, itemSummary, statusSummary, topRecipients, totalsOf, yearChange } from "@/lib/diwali-analysis-rules";
+import { AnalysisGift, CASH_KEY, firmSummary, groupSummary, itemSummary, statusSummary, topRecipients, totalsOf, yearChange } from "@/lib/diwali-analysis-rules";
 
 const money = (value: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(value);
 const STATUS_NAMES: Record<string, string> = { planned: "Planned", bought: "Bought", handed_over: "Handed over" };
 const arrow = (value: number) => value === 0 ? "no change" : `${value > 0 ? "▲" : "▼"} ${money(Math.abs(value))}`;
 
 // Gift-wise view of one year: who gets (or got) which gift, planned and handed over, with totals, groups and a comparison with last year.
-export function DiwaliItems({ year, gifts, flash }: { year: number; gifts: AnalysisGift[]; flash: (message: string) => void }) {
+export function DiwaliItems({ year, gifts, companyName = "", companyOrder = [], flash }: { year: number; gifts: AnalysisGift[]; companyName?: string; companyOrder?: string[]; flash: (message: string) => void }) {
   const [before, setBefore] = useState<AnalysisGift[] | null>(null);
   const [open, setOpen] = useState("");
   useEffect(() => {
@@ -20,6 +20,7 @@ export function DiwaliItems({ year, gifts, flash }: { year: number; gifts: Analy
   const status = useMemo(() => statusSummary(gifts), [gifts]);
   const items = useMemo(() => itemSummary(gifts), [gifts]);
   const groups = useMemo(() => groupSummary(gifts), [gifts]);
+  const firms = useMemo(() => firmSummary(gifts, companyOrder), [gifts, companyOrder]);
   const top = useMemo(() => topRecipients(gifts, 10), [gifts]);
   const all = totalsOf(gifts);
   const change = before && before.length ? yearChange(gifts, before) : null;
@@ -31,6 +32,7 @@ export function DiwaliItems({ year, gifts, flash }: { year: number; gifts: Analy
       const [{ buildTablePdf }, { analysisBlocks }] = await Promise.all([import("@/lib/table-pdf"), import("@/lib/diwali-report")]);
       const blocks = analysisBlocks({
         year, status: (["planned", "bought", "handed_over"] as const).map(key => ({ key, ...status[key] })), items, groups, top,
+        firms, companyName,
         change: change ? { beforeYear: year - 1, now: change.now, before: change.before } : undefined,
       });
       const link = document.createElement("a");
@@ -41,8 +43,8 @@ export function DiwaliItems({ year, gifts, flash }: { year: number; gifts: Analy
 
   if (!gifts.length) return <section className="panel loading-panel">No gifts recorded for Diwali {year} yet.</section>;
   return <div className="gift-analysis">
-    <div className="gift-print-title"><h1>Diwali gifts {year} - analysis</h1><p>Confidential</p></div>
-    <div className="gift-noprint gift-actions-bar"><span>Everything below is for <b>Diwali {year}</b> (change the year in the list tab).</span><span><button className="secondary" onClick={() => window.print()}>🖨 Print</button><button className="primary" onClick={pdf}>⇩ Download PDF</button></span></div>
+    <div className="gift-print-title"><h1>Diwali gifts {year} - analysis{companyName ? ` - ${companyName}` : ""}</h1><p>Confidential</p></div>
+    <div className="gift-noprint gift-actions-bar"><span>Everything below is for <b>Diwali {year}</b> (change the year with the box above){companyName ? <> · company: <b>{companyName}</b></> : null}.</span><span><button className="secondary" onClick={() => window.print()}>🖨 Print</button><button className="primary" onClick={pdf}>⇩ Download PDF</button></span></div>
 
     <div className="metrics compact">
       <div className="metric"><div className="metric-icon purple">◎</div><span>PEOPLE</span><strong>{all.people}</strong><small>{money(all.total)} in all</small></div>
@@ -60,6 +62,11 @@ export function DiwaliItems({ year, gifts, flash }: { year: number; gifts: Analy
       </table></div>
       <div className="table-foot"><span>Planned = planned or bought, not yet handed over. Cash counts one payment per person. Gift prices are included only where they were entered.</span></div>
     </section>
+
+    <section className="panel table-panel"><div className="table-tools"><b>By company</b><small>Which Velite company gives the gift. Staff count under their own company; parties under the company chosen on the gift.</small></div>
+      <div className="gift-compare-wrap"><table className="gift-compare"><thead><tr><th>Company</th><th>People</th><th>Handed over</th><th>To go</th><th>Gifts value</th><th>Cash</th><th>Total</th></tr></thead>
+        <tbody>{firms.map(row => <tr key={row.firm}><td><b>{row.firm}</b></td><td>{row.people}</td><td>{row.handed}</td><td>{row.pending}</td><td>{money(row.giftValue)}</td><td>{money(row.cash)}</td><td><b>{money(row.total)}</b></td></tr>)}</tbody>
+        <tfoot><tr><td><b>All</b></td><td><b>{all.people}</b></td><td><b>{handed.people}</b></td><td><b>{pending.people}</b></td><td><b>{money(all.giftValue)}</b></td><td><b>{money(all.cash)}</b></td><td><b>{money(all.total)}</b></td></tr></tfoot></table></div></section>
 
     <div className="gift-two">
       <section className="panel table-panel"><div className="table-tools"><b>By status</b></div>

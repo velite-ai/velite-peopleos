@@ -55,3 +55,18 @@ test("group summary, top recipients and the change from last year", () => {
   assert.equal(change.diff.people, 3);
   assert.equal(change.before.people, 2);
 });
+
+test("company-wise: a gift belongs to the company chosen on it, or a staff member's own company", async () => {
+  const { firmLabel, firmSummary, filterGifts: filter, NO_FIRM } = await import("../lib/diwali-analysis-rules.ts");
+  const rows = [
+    g("1", "A", "handed_over", [blanket()], 0, { firm: "Velite Healthcare" }),
+    g("2", "B", "planned", [dry()], 500, { firm: "Velite Healthcare" }),
+    g("3", "C", "handed_over", [dry()], 0, { recipientType: "staff", company: "Velite India", firm: undefined }),
+    g("4", "D", "planned", [blanket()], 0, {}),
+  ];
+  assert.deepEqual(rows.map(firmLabel), ["Velite Healthcare", "Velite Healthcare", "Velite India", NO_FIRM]);
+  const summary = firmSummary(rows, ["Velite Healthcare", "Velite India", "Velite Pharmaceuticals"]);
+  assert.deepEqual(summary.map(x => [x.firm, x.people, x.handed, x.pending]), [["Velite Healthcare", 2, 1, 1], ["Velite India", 1, 1, 0], [NO_FIRM, 1, 0, 1]]);
+  assert.equal(summary[0].total, 500 + 300 + 500);
+  assert.deepEqual(filter(rows, { status: "all", item: "all", group: "all", search: "", firm: "Velite India" }).map(x => x.id), ["3"]);
+});

@@ -31,6 +31,7 @@ export const giftShape = {
   givenBy: text(160),
   givenOn: z.iso.date().nullable(),
   notes: text(2000),
+  firm: text(120).optional(), // which Velite company gives the gift
 };
 export const hasContent = (value: { items: GiftLine[]; cashAmount: number }) => value.items.length > 0 || value.cashAmount > 0;
 export const createSchema = z.object({ ...giftShape, year: z.number().int().min(2000).max(2100), status: z.enum(GIFT_STATUSES) }).refine(hasContent, { message: "Add at least one gift item or a cash amount", path: ["items"] });
@@ -41,6 +42,7 @@ export type GiftDetails = {
   items: GiftLine[]; giftValue: number; cashAmount: number; cashMode: string; cashPaidOn: string | null;
   // Kept so lists, search and the comparison keep working: giftItem is the one-line summary, totalValue is gifts + cash.
   giftItem: string; quantity: number; unitValue: number; totalValue: number; vendor: string; billNo: string; givenBy: string; givenOn: string | null; notes: string;
+  firm?: string; // the Velite company that gives the gift (staff default to their own company)
   group?: string; // which sheet tab the gift came from (Workers / Office); older rows have none
 };
 
