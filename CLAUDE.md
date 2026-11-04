@@ -664,3 +664,14 @@ A party's gift may list several items with quantities, joined by `+` (`partyItem
 - **By gift & analysis** (`components/diwali-items.tsx`, rules in `lib/diwali-analysis-rules.ts`, unit tested): cards and a progress bar (handed over vs still to go), the **gift-wise table** (planned / handed over / all: people and pieces, value; click a gift to list the people, planned vs handed over; cash is its own row), **by status**, **by group**, **compared with last year** and the **ten highest totals**. "Planned" there means planned or bought (not handed over). Print and **Download PDF** give the whole analysis, including every gift's list of people.
 - **PDF writer:** `lib/table-pdf.ts` (dependency-free, A4 landscape, header row on every page, page numbers; same Helvetica widths as `lib/letter-pdf.ts`) and the wording in `lib/diwali-report.ts`. The PDF font has no rupee sign, so amounts are written "Rs 1,20,000".
 - No API or data changes. Values still count only prices that were entered (imported gifts are ₹0 until edited).
+
+---
+
+## 35. Gift master — Nov 2026
+
+**More → Diwali gifts → Gift master**: the list of gifts Velite gives (Comforter Set, Dry Fruit, …) with a standard price each. Table `diwali_gift_master` (migration 027): name, price and note are sealed JSON like the register; routes `GET/POST /api/diwali-gifts/master`, `PATCH/DELETE /api/diwali-gifts/master/[id]` (delete = soft), `POST /api/diwali-gifts/master/apply`; all behind the same Super Admin / named-login rule (`components/diwali-master.tsx`).
+- **Add / Edit gift:** each gift line is a drop-down of the master ("Comforter Set · ₹900"); choosing one fills the price, quantity × price is the line value, and the price can still be changed for one person. "Other (type the name)" allows a gift that is not in the master.
+- **Gifts already stored keep their own name and price** (a snapshot): changing the master never changes past gifts by itself.
+- **Fill prices into a year:** the master tab has *Check what would change* / *Apply to Diwali {year}*. It puts the master price on every gift line that has no price (or, with the second check, replaces entered prices too) and recalculates each person's gifts value and total (logged in `diwali_gift_events`). Names are matched ignoring case and extra spaces.
+- **New loads pick up master prices:** Load an earlier year (staff and parties) gives items the master price when the name matches.
+- The master tab also offers *Add them to the master* for gift names used in the year but not yet in the master (price 0 until entered).

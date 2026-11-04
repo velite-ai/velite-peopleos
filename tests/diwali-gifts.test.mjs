@@ -27,7 +27,7 @@ test("gift totals are worked out to the paisa", () => {
 
 test("every gift route checks for a Super Administrator, and nothing leaks into shared logs or search", async () => {
   const base = new URL("../app/api/diwali-gifts/", import.meta.url);
-  const files = [new URL("route.ts", base), new URL("[id]/route.ts", base), new URL("import/route.ts", base), new URL("plan/route.ts", base), new URL("compare/route.ts", base)];
+  const files = [new URL("route.ts", base), new URL("[id]/route.ts", base), new URL("import/route.ts", base), new URL("plan/route.ts", base), new URL("compare/route.ts", base), new URL("master/route.ts", base), new URL("master/[id]/route.ts", base), new URL("master/apply/route.ts", base)];
   for (const file of files) {
     const source = await readFile(file, "utf8");
     const handlers = source.split(/export async function /).slice(1);
@@ -84,4 +84,17 @@ test("gifts saved the old way (one item line, or 'X + Cash' from the sheet) are 
   assert.deepEqual(legacyParts({ giftItem: "Cash", quantity: 1, unitValue: 5100, totalValue: 5100 }), { items: [], cashAmount: 5100 });
   assert.deepEqual(legacyParts({ giftItem: "Casserole Set + Sweet Box + Cash", quantity: 1, unitValue: 21000, totalValue: 21000 }), { items: [{ item: "Casserole Set + Sweet Box", quantity: 1, unitValue: 0 }], cashAmount: 21000 });
   assert.deepEqual(legacyParts({ giftItem: "Dry fruit box", quantity: 3, unitValue: 400, totalValue: 1200 }), { items: [{ item: "Dry fruit box", quantity: 3, unitValue: 400 }], cashAmount: 0 });
+});
+
+test("master prices fill gift lines with no price, keep entered prices unless told to overwrite, and ignore names not in the master", async () => {
+  const { applyMasterPrices, masterKey } = await import("../lib/diwali-gift-rules.ts");
+  const prices = new Map([[masterKey("Comforter Set"), 900], [masterKey("Dry Fruit"), 600]]);
+  const items = [{ item: " comforter  set ", quantity: 2, unitValue: 0 }, { item: "Dry Fruit", quantity: 1, unitValue: 500 }, { item: "Bottle Set", quantity: 1, unitValue: 0 }];
+  const kept = applyMasterPrices(items, prices);
+  assert.deepEqual(kept.items.map(line => line.unitValue), [900, 500, 0]);
+  assert.equal(kept.changed, 1);
+  const over = applyMasterPrices(items, prices, true);
+  assert.deepEqual(over.items.map(line => line.unitValue), [900, 600, 0]);
+  assert.equal(over.changed, 2);
+  assert.equal(applyMasterPrices(kept.items, prices).changed, 0);
 });

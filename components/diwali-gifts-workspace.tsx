@@ -2,6 +2,7 @@
 
 import { DiwaliCompare } from "@/components/diwali-compare";
 import { DiwaliItems } from "@/components/diwali-items";
+import { DiwaliMaster, MasterGift } from "@/components/diwali-master";
 import { CASH_KEY, NO_GIFT_KEY, filterGifts, groupLabel, itemOptions, statusSummary, totalsOf } from "@/lib/diwali-analysis-rules";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
@@ -35,7 +36,7 @@ export function DiwaliGiftsWorkspace({ flash }: { flash: (message: string) => vo
   const [statusFilter, setStatusFilter] = useState("all");
   const [editing, setEditing] = useState<Gift | "new" | null>(null);
   const [refresh, setRefresh] = useState(0);
-  const [view, setView] = useState<"list" | "items" | "compare">("list");
+  const [view, setView] = useState<"list" | "items" | "master" | "compare">("list");
   const [itemFilter, setItemFilter] = useState("all");
   const [groupFilter, setGroupFilter] = useState("all");
   const [selected, setSelected] = useState<string[]>([]);
@@ -108,8 +109,8 @@ export function DiwaliGiftsWorkspace({ flash }: { flash: (message: string) => vo
 
   return <>
     <div className="page-head gift-noprint"><div><span className="eyebrow">Confidential · Super Admin only</span><h1>Diwali gifts</h1><p>Who gets what, what it costs and whether it has been handed over. Nobody else can see this page.</p></div><div className="gift-filters"><button className="secondary" onClick={() => setTool("import")}>Load an earlier year</button><button className="secondary" onClick={() => setTool("plan")}>Plan {year + 1} from {year}</button><button className="primary" onClick={() => setEditing("new")}>＋ Add gift</button></div></div>
-    <div className="gift-tabs gift-noprint" role="tablist">{([["list", "List"], ["items", "By gift & analysis"], ["compare", "Compare years"]] as const).map(([key, label]) => <button key={key} role="tab" aria-selected={view === key} className={view === key ? "active" : ""} onClick={() => setView(key)}>{label}</button>)}{view !== "compare" && <select className="gift-year" value={year} onChange={event => setYear(Number(event.target.value))} aria-label="Year">{yearOptions.map(value => <option key={value} value={value}>Diwali {value}</option>)}</select>}</div>
-    {view === "compare" ? <DiwaliCompare /> : view === "items" ? <DiwaliItems year={year} gifts={all} flash={flash} /> : <>
+    <div className="gift-tabs gift-noprint" role="tablist">{([["list", "List"], ["items", "By gift & analysis"], ["master", "Gift master"], ["compare", "Compare years"]] as const).map(([key, label]) => <button key={key} role="tab" aria-selected={view === key} className={view === key ? "active" : ""} onClick={() => setView(key)}>{label}</button>)}{view !== "compare" && <select className="gift-year" value={year} onChange={event => setYear(Number(event.target.value))} aria-label="Year">{yearOptions.map(value => <option key={value} value={value}>Diwali {value}</option>)}</select>}</div>
+    {view === "compare" ? <DiwaliCompare /> : view === "master" ? <DiwaliMaster year={year} gifts={all} flash={flash} onChanged={() => setRefresh(value => value + 1)} /> : view === "items" ? <DiwaliItems year={year} gifts={all} flash={flash} /> : <>
     <div className="gift-print-title"><h1>Diwali gifts {year}</h1><p>{filterText} · Confidential</p></div>
     <div className="metrics compact">
       <div className="metric"><div className="metric-icon purple">◎</div><span>PEOPLE</span><strong>{all.length}</strong><small>{handedOver} handed over · {all.length - handedOver} still to go</small></div>
@@ -153,7 +154,15 @@ export function DiwaliGiftsWorkspace({ flash }: { flash: (message: string) => vo
 function GiftForm({ gift, year, onClose, onSaved }: { gift: Gift | null; year: number; onClose: () => void; onSaved: () => void }) {
   const [type, setType] = useState<"staff" | "other">(gift?.recipientType || "staff");
   const [staff, setStaff] = useState<StaffOption[]>([]);
-  type Line = { item: string; quantity: string; unitValue: string };
+  type Line = { item: string; quantity: string; unitValue: string; other?: boolean };
+  const [master, setMaster] = useState<MasterGift[]>([]);
+  useEffect(() => { fetch("/api/diwali-gifts/master").then(response => response.ok ? response.json() : { data: [] }).then(body => setMaster(body.data || [])).catch(() => setMaster([])); }, []);
+  const masterByName = (name: string) => master.find(entry => entry.name.trim().toLowerCase() === name.replace(/\s+/g, " ").trim().toLowerCase());
+  function chooseGift(index: number, value: string) {
+    if (value === "") setLine(index, { item: "", unitValue: "", other: false });
+    else if (value === "__other") setLine(index, { other: true, item: masterByName(lines[index].item) ? "" : lines[index].item });
+    else { const entry = master.find(candidate => candidate.id === value); if (entry) setLine(index, { item: entry.name, unitValue: entry.unitValue > 0 ? String(entry.unitValue) : lines[index].unitValue, other: false }); }
+  }
   const [lines, setLines] = useState<Line[]>(gift?.items.length ? gift.items.map(line => ({ item: line.item, quantity: String(line.quantity), unitValue: String(line.unitValue || "") })) : gift ? [] : [{ item: "", quantity: "1", unitValue: "" }]);
   const [cash, setCash] = useState(gift?.cashAmount ? String(gift.cashAmount) : "");
   const setLine = (index: number, change: Partial<Line>) => setLines(current => current.map((line, at) => at === index ? { ...line, ...change } : line));
@@ -187,9 +196,14 @@ function GiftForm({ gift, year, onClose, onSaved }: { gift: Gift | null; year: n
         {type === "staff"
           ? <label className="span-two">Staff member<select name="employeeId" required defaultValue={gift?.employeeId || ""}><option value="" disabled>Choose a person…</option>{staff.map(person => <option key={person.id} value={person.id}>{[person.first_name, person.last_name].filter(Boolean).join(" ")} · {person.employee_code} · {person.business_head}</option>)}</select></label>
           : <><label>Name<input name="recipientName" required defaultValue={gift?.recipientType === "other" ? gift.recipientName : ""} /></label><label>Company or relation<input name="company" defaultValue={gift?.recipientType === "other" ? gift.company : ""} placeholder="For example Supplier, Client" /></label></>}
-        <div className="span-two gift-lines"><b>Gift items</b><small> Add each gift with how many and what one costs. Leave the value empty if you do not know it yet.</small>
+        <div className="span-two gift-lines"><b>Gift items</b><small> Choose each gift from the Gift master: its price comes in by itself and the value is worked out from how many. You can still change a price for one person.</small>
           {lines.map((line, index) => <div className="gift-line" key={index}>
-            <input aria-label="Gift" placeholder="For example Blanket, Dry fruit box" value={line.item} onChange={event => setLine(index, { item: event.target.value })} />
+            <span className="gift-pick">
+              <select aria-label="Gift" value={line.other || (line.item && !masterByName(line.item)) ? "__other" : masterByName(line.item)?.id || ""} onChange={event => chooseGift(index, event.target.value)}>
+                <option value="">Choose a gift…</option>{master.map(entry => <option key={entry.id} value={entry.id}>{entry.name}{entry.unitValue > 0 ? ` · ${money(entry.unitValue)}` : ""}</option>)}<option value="__other">Other (type the name)</option>
+              </select>
+              {(line.other || (line.item && !masterByName(line.item))) && <input aria-label="Gift name" placeholder="Type the gift name" value={line.item} onChange={event => setLine(index, { item: event.target.value })} />}
+            </span>
             <input aria-label="Quantity" type="number" min="1" step="1" value={line.quantity} onChange={event => setLine(index, { quantity: event.target.value })} />
             <input aria-label="Value of one (₹)" type="number" min="0" step="0.01" placeholder="₹ each" value={line.unitValue} onChange={event => setLine(index, { unitValue: event.target.value })} />
             <span className="gift-line-total">{money((Number(line.quantity) || 0) * (Number(line.unitValue) || 0))}</span>
