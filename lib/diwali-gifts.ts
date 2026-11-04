@@ -2,7 +2,7 @@ import { z } from "zod";
 import { fail } from "./api";
 import { currentUser } from "./auth";
 import { db } from "./database";
-import { CASH_MODES, GIFT_STATUSES, GiftLine, canUseGiftRegister, giftSummary, giftTotals, legacyParts } from "./diwali-gift-rules";
+import { CASH_MODES, GIFT_STATUSES, GiftLine, MasterPrices, canUseGiftRegister, giftSummary, giftTotals, legacyParts, masterKey } from "./diwali-gift-rules";
 import { openJson, sealJson } from "./encryption";
 
 // Every gift route starts here. Anyone who is not an unrestricted Super Administrator on the allowed list is told the page
@@ -101,3 +101,16 @@ export async function giftsOfYear(year: number) {
   const rows = await db()<GiftRow[]>`SELECT id,gift_year,status,details_encrypted,updated_at FROM diwali_gifts WHERE gift_year=${year} AND deleted_at IS NULL ORDER BY created_at`;
   return rows.map(toGift);
 }
+
+
+// ---- Gift master (sealed like the gifts) ----
+export type MasterGift = { id: string; name: string; unitValue: number; note: string };
+type MasterDetails = { name: string; unitValue: number; note: string };
+export const masterSchema = z.object({ name: text(120).min(1), unitValue: z.number().min(0).max(100000000), note: text(300).optional().default("") });
+
+export async function listMaster(): Promise<MasterGift[]> {
+  const rows = await db()<{ id: string; details_encrypted: Uint8Array }[]>`SELECT id,details_encrypted FROM diwali_gift_master WHERE deleted_at IS NULL ORDER BY created_at`;
+  return rows.map(row => ({ id: row.id, ...openJson<MasterDetails>(row.details_encrypted) })).sort((a, b) => a.name.localeCompare(b.name));
+}
+export const masterPrices = (list: MasterGift[]): MasterPrices => new Map(list.map(gift => [masterKey(gift.name), gift.unitValue]));
+export const sealMaster = (details: MasterDetails) => sealJson(details);

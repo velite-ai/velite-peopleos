@@ -54,3 +54,20 @@ export function legacyParts(details: { giftItem: string; quantity: number; unitV
   if (text.endsWith(" + Cash")) return { items: [{ item: text.slice(0, -7).trim(), quantity: 1, unitValue: 0 }], cashAmount: details.totalValue };
   return { items: [{ item: text, quantity: details.quantity, unitValue: details.unitValue }], cashAmount: 0 };
 }
+
+// ---- Gift master: standard price per gift name ----
+export const masterKey = (name: string) => name.replace(/\s+/g, " ").trim().toLowerCase();
+export type MasterPrices = Map<string, number>;
+
+// Gives gift lines their master price. Lines with a price already keep it unless overwrite is set. Names not in the master are left alone.
+export function applyMasterPrices(items: GiftLine[], prices: MasterPrices, overwrite = false) {
+  let changed = 0;
+  const next = items.map(line => {
+    const price = prices.get(masterKey(line.item));
+    if (price === undefined || price <= 0 || line.unitValue === price) return line;
+    if (line.unitValue > 0 && !overwrite) return line;
+    changed += 1;
+    return { ...line, unitValue: price };
+  });
+  return { items: next, changed };
+}

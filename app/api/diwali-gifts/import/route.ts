@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { apiError, ok } from "@/lib/api";
 import { db } from "@/lib/database";
-import { allPeople, giftsOfYear, insertGifts, requireSuperAdmin, sealGift, makeDetails } from "@/lib/diwali-gifts";
+import { allPeople, giftsOfYear, insertGifts, listMaster, masterPrices, requireSuperAdmin, sealGift, makeDetails } from "@/lib/diwali-gifts";
+import { applyMasterPrices } from "@/lib/diwali-gift-rules";
 import { buildGifts, buildPartyGifts, LEFT, nameKey, parseParties, parseSheet } from "@/lib/diwali-import-rules";
 
 const schema = z.object({ text: z.string().min(1).max(500000), year: z.number().int().min(2000).max(2100), sheet: z.string().trim().min(1).max(60), kind: z.enum(["workers", "parties"]).default("workers"), dryRun: z.boolean() });
@@ -39,9 +40,10 @@ export async function POST(request: Request) {
         await tx`INSERT INTO diwali_gift_events (gift_id,action,actor_user_id) VALUES (${id},'update',${user.id})`;
       }
     });
+    const prices = masterPrices(await listMaster());
     const added = await insertGifts(user.id, fresh.map(gift => ({
       year: gift.year, status: gift.status,
-      details: makeDetails({ recipientType: gift.recipientType, employeeId: gift.employeeId, recipientName: gift.recipientName, company: gift.company, items: gift.items ?? (gift.gift ? [{ item: gift.gift, quantity: 1, unitValue: 0 }] : []), cashAmount: gift.cash, cashMode: "", cashPaidOn: null, vendor: "", billNo: "", givenBy: "", givenOn: null, notes: gift.notes, group: gift.group }),
+      details: makeDetails({ recipientType: gift.recipientType, employeeId: gift.employeeId, recipientName: gift.recipientName, company: gift.company, items: applyMasterPrices(gift.items ?? (gift.gift ? [{ item: gift.gift, quantity: 1, unitValue: 0 }] : []), prices).items, cashAmount: gift.cash, cashMode: "", cashPaidOn: null, vendor: "", billNo: "", givenBy: "", givenOn: null, notes: gift.notes, group: gift.group }),
     })));
     return ok({ ...summary, added });
   } catch (error) { return apiError(error); }
