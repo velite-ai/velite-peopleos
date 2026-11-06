@@ -70,3 +70,8 @@ test("company-wise: a gift belongs to the company chosen on it, or a staff membe
   assert.equal(summary[0].total, 500 + 300 + 500);
   assert.deepEqual(filter(rows, { status: "all", item: "all", group: "all", search: "", firm: "Velite India" }).map(x => x.id), ["3"]);
 });
+
+test("the people listed under each gift are in alphabetical order", () => {
+  const rows = [g("1", "Zed Agency", "planned", [blanket()]), g("2", "amit medico", "planned", [blanket()]), g("3", "Bharat Pharma", "handed_over", [blanket()])];
+  assert.deepEqual(itemSummary(rows)[0].recipients.map(r => r.name), ["amit medico", "Bharat Pharma", "Zed Agency"]);
+});

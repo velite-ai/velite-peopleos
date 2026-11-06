@@ -65,6 +65,7 @@ export function itemSummary(gifts: AnalysisGift[]): ItemRow[] {
     for (const [key, entry] of perItem) add(touch(key, entry.name), gift, entry.qty, entry.value);
     if (gift.cashAmount > 0) add(touch(CASH_KEY, "Cash"), gift, 1, gift.cashAmount);
   }
+  for (const row of rows.values()) row.recipients.sort((a, b) => a.name.localeCompare(b.name, "en", { sensitivity: "base", numeric: true }));
   return [...rows.values()].sort((a, b) => (a.key === CASH_KEY ? 1 : b.key === CASH_KEY ? -1 : b.people - a.people || a.item.localeCompare(b.item)));
 }
 
