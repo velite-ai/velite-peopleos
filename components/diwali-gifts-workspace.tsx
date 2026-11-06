@@ -23,6 +23,8 @@ const money = (value: number) => new Intl.NumberFormat("en-IN", { style: "curren
 // Velite's companies in the order the team uses them; anything else follows alphabetically.
 const COMPANY_ORDER = ["healthcare", "india", "pharmaceuticals", "sciences", "others 1", "others 2"];
 // Besides Velite's own companies, a gift can be given by (or counted under) these two kinds of outside party.
+// Lists are shown A to Z by name, whichever company is chosen.
+const byName = (a: { recipientName: string }, b: { recipientName: string }) => a.recipientName.localeCompare(b.recipientName, "en", { sensitivity: "base", numeric: true });
 const PARTY_TYPES = ["Franchisee Party", "Third-Party Client"];
 const orderCompanies = (names: string[]) => [...names].sort((a, b) => { const rank = (name: string) => { const at = COMPANY_ORDER.findIndex(key => name.toLowerCase().includes(key)); return at < 0 ? 99 : at; }; return rank(a) - rank(b) || a.localeCompare(b); });
 
@@ -65,7 +67,7 @@ export function DiwaliGiftsWorkspace({ flash }: { flash: (message: string) => vo
   const everyone = gifts || [];
   const companyOptions = useMemo(() => { const present = new Set(everyone.map(firmLabel)); return [...companyNames, ...[...present].filter(name => !companyNames.includes(name) && name !== NO_FIRM), ...(present.has(NO_FIRM) ? [NO_FIRM] : [])]; }, [everyone, companyNames]);
   const all = useMemo(() => filterGifts(everyone, { status: "all", item: "all", group: "all", search: "", firm: companyFilter }) as Gift[], [everyone, companyFilter]);
-  const visible = filterGifts(all, { status: statusFilter, item: itemFilter, group: groupFilter, search }) as Gift[];
+  const visible = (filterGifts(all, { status: statusFilter, item: itemFilter, group: groupFilter, search }) as Gift[]).sort(byName);
   const itemChoices = useMemo(() => itemOptions(all), [all]);
   const groupChoices = useMemo(() => [...new Set(all.map(groupLabel))].sort(), [all]);
   const byStatus = useMemo(() => statusSummary(all), [all]);
