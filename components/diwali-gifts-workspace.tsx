@@ -22,6 +22,8 @@ const money = (value: number) => new Intl.NumberFormat("en-IN", { style: "curren
 
 // Velite's companies in the order the team uses them; anything else follows alphabetically.
 const COMPANY_ORDER = ["healthcare", "india", "pharmaceuticals", "sciences", "others 1", "others 2"];
+// Besides Velite's own companies, a gift can be given by (or counted under) these two kinds of outside party.
+const PARTY_TYPES = ["Franchisee Party", "Third-Party Client"];
 const orderCompanies = (names: string[]) => [...names].sort((a, b) => { const rank = (name: string) => { const at = COMPANY_ORDER.findIndex(key => name.toLowerCase().includes(key)); return at < 0 ? 99 : at; }; return rank(a) - rank(b) || a.localeCompare(b); });
 
 async function bodyData(response: Response) {
@@ -45,7 +47,7 @@ export function DiwaliGiftsWorkspace({ flash }: { flash: (message: string) => vo
   const [groupFilter, setGroupFilter] = useState("all");
   const [companyFilter, setCompanyFilter] = useState("all");
   const [companyNames, setCompanyNames] = useState<string[]>([]);
-  useEffect(() => { fetch("/api/business-heads").then(response => response.ok ? response.json() : { data: [] }).then(body => setCompanyNames(orderCompanies((body.data || []).map((row: { name: string }) => row.name)))).catch(() => setCompanyNames([])); }, []);
+  useEffect(() => { fetch("/api/business-heads").then(response => response.ok ? response.json() : { data: [] }).then(body => setCompanyNames([...orderCompanies((body.data || []).map((row: { name: string }) => row.name)), ...PARTY_TYPES])).catch(() => setCompanyNames(PARTY_TYPES)); }, []);
   const [selected, setSelected] = useState<string[]>([]);
   const [tool, setTool] = useState<"import" | "plan" | null>(null);
 
@@ -213,7 +215,7 @@ function GiftForm({ gift, year, companies, onClose, onSaved }: { gift: Gift | nu
         <div className="span-two gift-type"><label><input type="radio" checked={type === "staff"} onChange={() => setType("staff")} /> Velite staff member</label><label><input type="radio" checked={type === "other"} onChange={() => setType("other")} /> Someone else (client, vendor, other)</label></div>
         {type === "staff"
           ? <label className="span-two">Staff member (the gift is counted under their company)<select name="employeeId" required defaultValue={gift?.employeeId || ""}><option value="" disabled>Choose a person…</option>{staff.map(person => <option key={person.id} value={person.id}>{[person.first_name, person.last_name].filter(Boolean).join(" ")} · {person.employee_code} · {person.business_head}</option>)}</select></label>
-          : <><label>Name<input name="recipientName" required defaultValue={gift?.recipientType === "other" ? gift.recipientName : ""} /></label><label>Company or relation<input name="company" defaultValue={gift?.recipientType === "other" ? gift.company : ""} placeholder="For example Supplier, Client" /></label><label className="span-two">Velite company giving this gift<select name="firm" defaultValue={gift?.firm || ""}><option value="">Not set yet</option>{companies.map(name => <option key={name} value={name}>{name}</option>)}</select></label></>}
+          : <><label>Name<input name="recipientName" required defaultValue={gift?.recipientType === "other" ? gift.recipientName : ""} /></label><label>Company or relation<input name="company" defaultValue={gift?.recipientType === "other" ? gift.company : ""} placeholder="For example Supplier, Client" /></label><label className="span-two">Velite company giving this gift, or the kind of party<select name="firm" defaultValue={gift?.firm || ""}><option value="">Not set yet</option><optgroup label="Velite companies">{companies.filter(name => !PARTY_TYPES.includes(name)).map(name => <option key={name} value={name}>{name}</option>)}</optgroup><optgroup label="Outside parties">{PARTY_TYPES.map(name => <option key={name} value={name}>{name}</option>)}</optgroup></select></label></>}
         <div className="span-two gift-lines"><b>Gift items</b><small> Choose each gift from the Gift master: its price comes in by itself and the value is worked out from how many. You can still change a price for one person.</small>
           {lines.map((line, index) => <div className="gift-line" key={index}>
             <span className="gift-pick">
