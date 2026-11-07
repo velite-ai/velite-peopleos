@@ -176,6 +176,8 @@ export function DiwaliGiftsWorkspace({ flash }: { flash: (message: string) => vo
 function GiftForm({ gift, year, companies, onClose, onSaved }: { gift: Gift | null; year: number; companies: string[]; onClose: () => void; onSaved: () => void }) {
   const [type, setType] = useState<"staff" | "other">(gift?.recipientType || "staff");
   const [staff, setStaff] = useState<StaffOption[]>([]);
+  // The chosen person is kept in state, so the drop-down keeps them even before the staff list has loaded (and when they are not in it, e.g. someone who has left).
+  const [employeeId, setEmployeeId] = useState(gift?.employeeId || "");
   type Line = { item: string; quantity: string; unitValue: string; other?: boolean };
   const [master, setMaster] = useState<MasterGift[]>([]);
   useEffect(() => { fetch("/api/diwali-gifts/master").then(response => response.ok ? response.json() : { data: [] }).then(body => setMaster(body.data || [])).catch(() => setMaster([])); }, []);
@@ -199,7 +201,7 @@ function GiftForm({ gift, year, companies, onClose, onSaved }: { gift: Gift | nu
     const form = new FormData(event.currentTarget);
     const text = (name: string) => String(form.get(name) || "").trim();
     const payload = {
-      recipientType: type, employeeId: type === "staff" ? text("employeeId") || null : null, recipientName: text("recipientName"), company: text("company"), firm: type === "other" ? text("firm") : undefined,
+      recipientType: type, employeeId: type === "staff" ? employeeId || null : null, recipientName: text("recipientName"), company: text("company"), firm: type === "other" ? text("firm") : undefined,
       items: lines.filter(line => line.item.trim()).map(line => ({ item: line.item.trim(), quantity: Math.max(1, Math.round(Number(line.quantity) || 1)), unitValue: Number(line.unitValue) || 0 })),
       cashAmount: Number(cash) || 0, cashMode: text("cashMode"), cashPaidOn: text("cashPaidOn") || null, vendor: text("vendor"), billNo: text("billNo"),
       givenBy: text("givenBy"), givenOn: text("givenOn") || null, notes: text("notes"), status: text("status") || "planned",
@@ -216,7 +218,7 @@ function GiftForm({ gift, year, companies, onClose, onSaved }: { gift: Gift | nu
       <form onSubmit={submit} className="form-grid">
         <div className="span-two gift-type"><label><input type="radio" checked={type === "staff"} onChange={() => setType("staff")} /> Velite staff member</label><label><input type="radio" checked={type === "other"} onChange={() => setType("other")} /> Someone else (client, vendor, other)</label></div>
         {type === "staff"
-          ? <label className="span-two">Staff member (the gift is counted under their company)<select name="employeeId" required defaultValue={gift?.employeeId || ""}><option value="" disabled>Choose a person…</option>{staff.map(person => <option key={person.id} value={person.id}>{[person.first_name, person.last_name].filter(Boolean).join(" ")} · {person.employee_code} · {person.business_head}</option>)}</select></label>
+          ? <label className="span-two">Staff member (the gift is counted under their company)<select name="employeeId" required value={employeeId} onChange={event => setEmployeeId(event.target.value)}><option value="" disabled>Choose a person…</option>{gift?.employeeId && !staff.some(person => person.id === gift.employeeId) && <option value={gift.employeeId}>{gift.recipientName}{hasLeft(gift) ? " (has left)" : ""}</option>}{staff.map(person => <option key={person.id} value={person.id}>{[person.first_name, person.last_name].filter(Boolean).join(" ")} · {person.employee_code} · {person.business_head}</option>)}</select></label>
           : <><label>Name<input name="recipientName" required defaultValue={gift?.recipientType === "other" ? gift.recipientName : ""} /></label><label>Company or relation<input name="company" defaultValue={gift?.recipientType === "other" ? gift.company : ""} placeholder="For example Supplier, Client" /></label><label className="span-two">Velite company giving this gift, or the kind of party<select name="firm" defaultValue={gift?.firm || ""}><option value="">Not set yet</option><optgroup label="Velite companies">{companies.filter(name => !PARTY_TYPES.includes(name)).map(name => <option key={name} value={name}>{name}</option>)}</optgroup><optgroup label="Outside parties">{PARTY_TYPES.map(name => <option key={name} value={name}>{name}</option>)}</optgroup></select></label></>}
         <div className="span-two gift-lines"><b>Gift items</b><small> Choose each gift from the Gift master: its price comes in by itself and the value is worked out from how many. You can still change a price for one person.</small>
           {lines.map((line, index) => <div className="gift-line" key={index}>
