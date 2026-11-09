@@ -694,3 +694,11 @@ Every gift now has a **Velite company** (`firm` in the sealed details): Velite H
 
 Locking a month's attendance (**Attendance → Month & more → Finalise month for salary**) used to need a different login from the one that sent the month for checking. A **Super Administrator may now do both steps** (`app/api/attendance/months/route.ts`); every other role still needs a second person. When the same person does both, the audit entry `attendance_month.lock` carries `reviewedAndLockedBySamePerson: true`.
 Payroll is unchanged: the person who calculates a salary month still cannot review it (§13).
+
+---
+
+## 38. Attendance month counts only days inside employment — Nov 2026
+
+The monthly summary (`app/api/attendance/months/route.ts`, the snapshot salary reads) counted **every** attendance mark in the month, including marks on days after a person's last working day or before their joining date (e.g. from "Mark everyone Present"). Two effects found on October 2026 (Others 1, seven people who left mid-month): salary refused to calculate ("Locked attendance is incomplete", recorded days ≠ expected days), and extra *Absent* marks outside employment were counted as unpaid days, lowering pay (Nirmala 4 unpaid instead of 2).
+The join now keeps only days from the joining date to the last working day. Marks outside that window stay stored but are ignored.
+**A month locked before this change keeps its old snapshot:** reopen it (Month & more → Reopen month, Super Admin / HR), then prepare, send for checking and finalise again so the summary is rebuilt.
