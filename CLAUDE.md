@@ -715,11 +715,26 @@ Why: paid leave is decided by the accountant **while working out the salary**, a
 - **Pay nothing** (no days, overtime, advance, extras): the rule below. It is pre-ticked when the person's exit type is *Stopped coming* (`abandonment`).
 - The trace keeps what was used (`provenance.salaryInputs`, `PAID_LEAVE_APPLIED`, `NO_SALARY`).
 
-**Rules decided by Velite (to be built as step 2 — the app does not apply them yet).** Where the accountant's October sheet differs, these rules win.
+**Rules decided by Velite (built as step 2, §40).** Where the accountant's October sheet differs, these rules win.
 1. Pay = monthly basic ÷ days in the month × paid days. Paid days = days present (half day 0.5) + Sundays granted + national holidays granted + paid leave granted.
 2. **Sundays and holidays granted** come from days present (October 2026 table, 31 days, 25 working days, 4 Sundays, 2 holidays):
    22–25 → 4 Sundays + 2 holidays · 17.5–21.5 → 3 + 2 · 13.5–17 → 2 + 1 · 10–13 → 1 + 0 · 8–9.5 → 0 + 0 (below 8 assumed 0 + 0). Paid leave does not count toward the row. How the ranges are set for other months is **not yet known**.
 3. **Joined after the 7th of the month:** paid for working days only (no Sundays / holidays). **Joined in the first 7 days:** eligible for Sundays and holidays by the table.
 4. **Left during the salary month:** paid for working days only.
 5. **Stopped coming without informing the company: no salary at all** (the employee signs an undertaking when joining). Use *Pay nothing* in Salary inputs.
-Open questions: is the 7th itself "first week"; do holidays before a joining date count; is a last working day on the 31st a full month; October's sheet gave Sundays and holidays to three leavers (Nirmala, Harpreet, Sahil) — by the rule above they would not get them.
+Answered 9 Nov 2026: joining on the 7th **is** the first week; holidays before a joining date do **not** count; a last working day on the 31st **is** a full month; the table's cut-offs scale with the month's working days. October's sheet gave Sundays and holidays to three leavers (Nirmala, Harpreet, Sahil) — under these rules they get working days only (20, 14, 19).
+
+---
+
+## 40. Velite's paid-days table, built into the salary run — Nov 2026
+
+For companies with `business_heads.paid_days_rule = 'velite_table'` (migration 029; **Others 1 only**) the salary run no longer pays whatever is marked Off. `lib/paid-days-rules.ts` (unit tested, `tests/paid-days-rules.test.mjs`) works out each person's paid days:
+- **Present** = present + work from home + on duty + half days at 0.5, counted only inside the person's employment (joining date to last working day). **Off / weekly off / holiday marks are ignored**: Sundays and holidays are granted by the table instead, so attendance only needs present / half day / absent / leave.
+- **Table** (cut-offs = 88%, 70%, 54%, 40%, 32% of the month's working days, rounded to the half day; working days = days in the month − Sundays − national holidays that are not Sundays). October 2026 (25 working days): 22+ → 4 Sundays + 2 holidays · 17.5+ → 3 + 2 · 13.5+ → 2 + 1 · 10+ → 1 + 0 · 8+ → 0 + 0. For other months: Sundays = all in the top band, one fewer per lower band, none in the lowest; holidays = all in the top two bands, one fewer in the third, none below.
+- Only Sundays and holidays **inside the person's employment** count (a holiday before joining does not).
+- **Joined after the 7th** (joining on the 7th is still the first week) or **left before the end of the month** (a last day on the last day of the month is a full month): working days only, no Sundays or holidays.
+- **Paid leave** = days marked paid leave in attendance + paid leave typed in Salary inputs, added on top, never beyond the days employed. **Pay nothing** pays 0.
+- **Paid days** = present + Sundays + holidays + paid leave, capped at the days employed. The trace keeps the working (`provenance.paidDays`: band, Sundays, holidays, reason).
+- **Holidays of the month** are typed in the Salary inputs panel (`payroll_periods.national_holidays`, saved with the inputs and audited as `payroll.holidays`); the panel offers the HR holiday calendar's dates as a suggestion. With no holidays added, Sundays are granted but no holidays.
+- The panel shows Present / Sundays / Holidays / Paid leave / Paid days per person, live as you type. The salary run reads the **locked attendance days** directly, so a month locked before this change does not need re-locking.
+- Other companies keep `'marked'` (the original method, §13). To switch one: `UPDATE business_heads SET paid_days_rule='velite_table' WHERE name='Others 2';` (check the company's attendance practice first).
