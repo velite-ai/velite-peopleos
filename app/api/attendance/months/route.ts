@@ -47,7 +47,8 @@ export async function POST(request: Request) {
     if (existing?.status === "locked") return fail("This attendance month is locked", 409);
     if (input.action === "lock") {
       if (!existing || existing.status !== "review" || !existing.reviewed_by) return fail("Attendance must be reviewed by a maker before it can be locked", 409);
-      if (existing.reviewed_by === user.id) return fail("The attendance reviewer and locker must be different people", 409);
+      // A Super Administrator may lock a month they sent for checking themselves (one-person setup); everyone else still needs a second person. The audit entry records it.
+      if (existing.reviewed_by === user.id && !user.roles.some(role => role.code === "SUPER_ADMIN")) return fail("The attendance reviewer and locker must be different people", 409);
       const [pending] = await sql<{count:number}[]>`SELECT count(*)::int AS count FROM attendance_corrections c JOIN attendance_days a ON a.id=c.attendance_day_id JOIN employees e ON e.id=a.employee_id WHERE e.business_head_id=${input.businessHeadId} AND a.attendance_date>=${input.periodMonth}::date AND a.attendance_date<${input.periodMonth}::date+interval '1 month' AND c.status='pending'`;
       if (pending.count > 0) return fail("Resolve all pending attendance corrections before locking the month", 409, { pendingCorrections: pending.count });
     }
@@ -60,7 +61,7 @@ export async function POST(request: Request) {
       const reviewedBy=input.action==='review'?user.id:input.action==='lock'?existing?.reviewed_by||null:null;
       const rows = await tx`INSERT INTO attendance_months (business_head_id,period_month,status,employee_count,exception_count,summary,reviewed_at,reviewed_by,locked_at,locked_by) VALUES (${input.businessHeadId},${input.periodMonth},${nextStatus},${summary.length},${exceptions},${JSON.stringify({employees:summary})}::jsonb,${reviewedAt},${reviewedBy},${input.action==='lock'?new Date():null},${input.action==='lock'?user.id:null}) ON CONFLICT (business_head_id,period_month) DO UPDATE SET status=EXCLUDED.status,employee_count=EXCLUDED.employee_count,exception_count=EXCLUDED.exception_count,summary=EXCLUDED.summary,reviewed_at=EXCLUDED.reviewed_at,reviewed_by=EXCLUDED.reviewed_by,locked_at=EXCLUDED.locked_at,locked_by=EXCLUDED.locked_by,updated_at=now() RETURNING *`;
       if (input.action === "lock") await tx`UPDATE attendance_days a SET locked_at=coalesce(a.locked_at,now()),locked_by=coalesce(a.locked_by,${user.id}) FROM employees e WHERE e.id=a.employee_id AND e.business_head_id=${input.businessHeadId} AND a.attendance_date>=${input.periodMonth}::date AND a.attendance_date<${input.periodMonth}::date+interval '1 month'`;
-      await tx`INSERT INTO audit_events (actor_user_id,action,entity_type,entity_id,business_head_id,after_data,reason) VALUES (${user.id},${`attendance_month.${input.action}`},'attendance_month',${rows[0].id},${input.businessHeadId},${JSON.stringify({employeeCount:summary.length,exceptionCount:exceptions,status:rows[0].status})}::jsonb,${input.reason})`;
+      await tx`INSERT INTO audit_events (actor_user_id,action,entity_type,entity_id,business_head_id,after_data,reason) VALUES (${user.id},${`attendance_month.${input.action}`},'attendance_month',${rows[0].id},${input.businessHeadId},${JSON.stringify({employeeCount:summary.length,exceptionCount:exceptions,status:rows[0].status,...(input.action==='lock'&&existing?.reviewed_by===user.id?{reviewedAndLockedBySamePerson:true}:{})})}::jsonb,${input.reason})`;
       return rows;
     });
     return ok(saved);
