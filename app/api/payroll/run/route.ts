@@ -25,7 +25,7 @@ export async function POST(request:Request){
       if(payrollApprovalMode()==='simple'){
         const reviewer=approvals.find(step=>step.stage==='reviewer');
         if(!reviewer)return fail('The review is required before the salary month can be locked',409);
-        if(reviewer.actor_user_id===period.calculated_by)return fail('The person who prepared the salary cannot also review it',409);
+        if(reviewer.actor_user_id===period.calculated_by&&!user.roles.some(role=>role.code==='SUPER_ADMIN'))return fail('The person who prepared the salary cannot also review it',409);
       }else{
         if(!approvals.some(step=>step.stage==='reviewer')||!approvals.some(step=>step.stage==='finance'))return fail('Reviewer and finance approvals are both required before lock',409);
         if(new Set(approvals.map(step=>step.actor_user_id)).size!==approvals.length)return fail('Payroll approval stages must use different people',409);

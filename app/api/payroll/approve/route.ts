@@ -24,9 +24,11 @@ export async function POST(request:Request){
         await tx`INSERT INTO audit_events (actor_user_id,action,entity_type,entity_id,business_head_id,reason,after_data) VALUES (${user.id},'payroll.return','payroll_period',${input.payrollPeriodId},${period.business_head_id},${input.reason},${JSON.stringify({stage,previousApprovals:approvals})}::jsonb)`;
         return{status:'open',stage,decision:'return'};
       }
-      if(period.calculated_by===user.id)return null;
-      const reviewer=approvals.find(step=>step.stage==='reviewer');const finance=approvals.find(step=>step.stage==='finance');
       const simple=payrollApprovalMode()==='simple';
+      // In simple mode a Super Administrator may approve a month they calculated themselves (one-person setup); everyone else, and strict mode, still need a second person.
+      const samePerson=period.calculated_by===user.id;const superAdmin=user.roles.some(role=>role.code==='SUPER_ADMIN');
+      if(samePerson&&!(simple&&superAdmin))return null;
+      const reviewer=approvals.find(step=>step.stage==='reviewer');const finance=approvals.find(step=>step.stage==='finance');
       if(simple&&reviewer)return{status:'approved',stage:'reviewer',decision:'approve',alreadyApproved:true};
       const stage=reviewer&&!simple?'finance':'reviewer';
       if(stage==='reviewer'&&!hasRoleForScope(user,['HR_ADMIN'],period.business_head_id))throw new Error('REVIEWER_ROLE_REQUIRED');
@@ -36,7 +38,7 @@ export async function POST(request:Request){
       await tx`INSERT INTO payroll_approval_steps (payroll_period_id,stage,decision,actor_user_id,reason) VALUES (${input.payrollPeriodId},${stage},'approve',${user.id},${input.reason})`;
       const next=stage==='finance'||simple?'approved':'review';
       await tx`UPDATE payroll_periods SET status=${next} WHERE id=${input.payrollPeriodId}`;
-      await tx`INSERT INTO audit_events (actor_user_id,action,entity_type,entity_id,business_head_id,reason,after_data) VALUES (${user.id},${`payroll.${stage}_approve`},'payroll_period',${input.payrollPeriodId},${period.business_head_id},${input.reason},${JSON.stringify({stage,status:next})}::jsonb)`;
+      await tx`INSERT INTO audit_events (actor_user_id,action,entity_type,entity_id,business_head_id,reason,after_data) VALUES (${user.id},${`payroll.${stage}_approve`},'payroll_period',${input.payrollPeriodId},${period.business_head_id},${input.reason},${JSON.stringify({stage,status:next,...(samePerson?{calculatedAndApprovedBySamePerson:true}:{})})}::jsonb)`;
       return{status:next,stage,decision:'approve'};
     }).catch(error=>{if(error instanceof Error&&['REVIEWER_ROLE_REQUIRED','FINANCE_ROLE_REQUIRED'].includes(error.message))return error.message;throw error;});
     if(result==='REVIEWER_ROLE_REQUIRED')return fail('An HR administrator must perform the reviewer approval',403);
