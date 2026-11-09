@@ -702,3 +702,24 @@ Payroll is unchanged: the person who calculates a salary month still cannot revi
 The monthly summary (`app/api/attendance/months/route.ts`, the snapshot salary reads) counted **every** attendance mark in the month, including marks on days after a person's last working day or before their joining date (e.g. from "Mark everyone Present"). Two effects found on October 2026 (Others 1, seven people who left mid-month): salary refused to calculate ("Locked attendance is incomplete", recorded days ≠ expected days), and extra *Absent* marks outside employment were counted as unpaid days, lowering pay (Nirmala 4 unpaid instead of 2).
 The join now keeps only days from the joining date to the last working day. Marks outside that window stay stored but are ignored.
 **A month locked before this change keeps its old snapshot:** reopen it (Month & more → Reopen month, Super Admin / HR), then prepare, send for checking and finalise again so the summary is rebuilt.
+
+---
+
+## 39. Salary inputs and the salary-day rules decided by Velite — Nov 2026
+
+**Salary inputs (built, step 1).** Salary → pick a salary month → **Salary inputs** panel (above the register): per person *Paid leave*, *Overtime (hrs)*, *Advance (₹)*, *Pay nothing* and a note. Save, then **Calculate payroll**.
+Why: paid leave is decided by the accountant **while working out the salary**, after attendance is locked, so it cannot be an attendance mark. Table `payroll_inputs` (migration 028, one row per month and person); `GET/PUT /api/payroll/inputs` (read needs `payroll:read`, save `payroll:write`; editable until the month is approved; every change is an audit event `payroll.inputs` with a reason); rules in `lib/payroll-input-rules.ts` (unit tested); applied in `app/api/payroll/run/route.ts`; screen `components/payroll-inputs.tsx`.
+- **Paid leave** turns unpaid days (absent, unpaid leave) into paid days; it can never exceed the unpaid days, so nobody is paid for more than the days they were employed. Half days allowed. It is **not** counted as a day present.
+- **Overtime hours** are added to approved overtime requests. Rate = the pay record's overtime rate, else **basic ÷ days in the month ÷ 8** (the accountant's "salary per hour").
+- **Advance deducted** is taken in this month's pay and shows in the register's Advance column. It is *not* a loan: marking the month paid does not reduce `employee_loans` for it (`ADVANCE_FROM_INPUT` in the trace). The sheet's "advance in hand" is not tracked yet.
+- **Pay nothing** (no days, overtime, advance, extras): the rule below. It is pre-ticked when the person's exit type is *Stopped coming* (`abandonment`).
+- The trace keeps what was used (`provenance.salaryInputs`, `PAID_LEAVE_APPLIED`, `NO_SALARY`).
+
+**Rules decided by Velite (to be built as step 2 — the app does not apply them yet).** Where the accountant's October sheet differs, these rules win.
+1. Pay = monthly basic ÷ days in the month × paid days. Paid days = days present (half day 0.5) + Sundays granted + national holidays granted + paid leave granted.
+2. **Sundays and holidays granted** come from days present (October 2026 table, 31 days, 25 working days, 4 Sundays, 2 holidays):
+   22–25 → 4 Sundays + 2 holidays · 17.5–21.5 → 3 + 2 · 13.5–17 → 2 + 1 · 10–13 → 1 + 0 · 8–9.5 → 0 + 0 (below 8 assumed 0 + 0). Paid leave does not count toward the row. How the ranges are set for other months is **not yet known**.
+3. **Joined after the 7th of the month:** paid for working days only (no Sundays / holidays). **Joined in the first 7 days:** eligible for Sundays and holidays by the table.
+4. **Left during the salary month:** paid for working days only.
+5. **Stopped coming without informing the company: no salary at all** (the employee signs an undertaking when joining). Use *Pay nothing* in Salary inputs.
+Open questions: is the 7th itself "first week"; do holidays before a joining date count; is a last working day on the 31st a full month; October's sheet gave Sundays and holidays to three leavers (Nirmala, Harpreet, Sahil) — by the rule above they would not get them.
