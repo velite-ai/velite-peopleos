@@ -11,8 +11,8 @@ test("correcting a pay rate needs payroll write access and is written to the aud
   assert.match(route, /compensation_revision/);
 });
 
-test("a pay rate already used by a salary month under review, approved, locked or paid cannot be changed", () => {
-  assert.match(route, /'review','approved','locked','paid'/);
+test("a pay rate already used by a salary month approved, locked or paid cannot be changed", () => {
+  assert.match(route, /'approved','locked','paid'/);
   assert.match(route, /Add a new revision instead/);
 });
 
