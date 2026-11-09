@@ -687,3 +687,10 @@ Every gift now has a **Velite company** (`firm` in the sealed details): Velite H
 - **Outside parties (Nov 2026):** besides the six Velite companies, the company drop-down (Add / Edit gift, **Set company…**, the company filter) also offers **Franchisee Party** and **Third-Party Client** (`PARTY_TYPES` in `components/diwali-gifts-workspace.tsx`). They are stored in the same `firm` field and appear as their own rows in **By company** (and the PDF), so franchisee and third-party gifts can be totalled apart from Velite's own companies.
 - **Alphabetical order (Nov 2026):** the Diwali List (and its Print / PDF / Excel) is always sorted A to Z by recipient name, whichever company, status or gift is chosen; the names listed under each gift in the analysis are sorted the same way.
 - **Edit-gift staff drop-down (Nov 2026):** the chosen staff member is kept in state (`employeeId` in `GiftForm`) and the person's own record is always offered as an option (also for people who have left, who are not in `/api/employees`). Before, an uncontrolled drop-down fell back to the first name (e.g. AISHWERYA) when the staff list loaded after the form opened or did not contain the person, and saving moved the gift to that person.
+
+---
+
+## 37. One-person attendance lock — Nov 2026
+
+Locking a month's attendance (**Attendance → Month & more → Finalise month for salary**) used to need a different login from the one that sent the month for checking. A **Super Administrator may now do both steps** (`app/api/attendance/months/route.ts`); every other role still needs a second person. When the same person does both, the audit entry `attendance_month.lock` carries `reviewedAndLockedBySamePerson: true`.
+Payroll is unchanged: the person who calculates a salary month still cannot review it (§13).
