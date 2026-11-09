@@ -5,6 +5,8 @@
 //   node import-register-month.mjs --validate   < data.json   no database; only checks the numbers add up to the printed totals
 //   node import-register-month.mjs              < data.json   read-only look at the database: who matches, who is new, what would change
 //   node import-register-month.mjs --apply      < data.json   writes everything in one transaction
+// Optional payload key: "confirmedSamePerson": ["63"] = staff codes the user confirmed are the same person although the name differs
+//   (spelling) or the record was archived: the import then renames the record to the sheet's name and makes it Active again (with history).
 // Row layout (arrays): [type,serial,page,code,name,guardian,position,department,joined(DD/MM/YYYY),esiNo,pfAccount,uan,days,
 //   basic,hra,ca,oa, earnedWages,earnedHra,earnedCa,earnedOa, esi,epf,advance,lwf, totalDues,totalDeductions,net]
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
@@ -65,15 +67,16 @@ try {
   const plan = rows.map(row => {
     const person = byCode.get(row[F.code]) || byTrimmed.get(row[F.code].replace(/^0+/, "")) || null;
     const fullName = normalName(`${person?.first_name || ""}${person?.last_name || ""}`);
+    const confirmed = Boolean(person) && (payload.confirmedSamePerson || []).map(String).includes(String(row[F.code]));
     const nameMatches = person ? fullName === normalName(row[F.name]) : null;
-    return { row, person, nameMatches };
+    return { row, person, nameMatches, confirmed };
   });
   console.log(`\n${payload.businessHead}: ${plan.filter(item => item.person).length} found by staff code, ${plan.filter(item => !item.person).length} new`);
-  for (const { row, person, nameMatches } of plan) {
-    const note = !person ? "NEW (will be added)" : nameMatches ? `exists as ${person.employee_code} (${person.status})` : `CODE FOUND BUT NAME DIFFERS: app has "${person.first_name} ${person.last_name || ""}" (${person.status})`;
+  for (const { row, person, nameMatches, confirmed } of plan) {
+    const note = !person ? "NEW (will be added)" : confirmed && (!nameMatches || person.status === "archived") ? `CONFIRMED SAME PERSON: will rename "${person.first_name} ${person.last_name || ""}" to "${row[F.name]}" and make Active (now ${person.status})` : nameMatches ? `exists as ${person.employee_code} (${person.status})` : `CODE FOUND BUT NAME DIFFERS: app has "${person.first_name} ${person.last_name || ""}" (${person.status})`;
     console.log(`  ${String(row[F.code]).padStart(3)}  ${row[F.name].padEnd(22)} net ${String(row[F.net]).padStart(6)}  ${note}`);
   }
-  const mismatched = plan.filter(item => item.person && !item.nameMatches);
+  const mismatched = plan.filter(item => item.person && !item.nameMatches && !item.confirmed);
   if (mismatched.length && mode === "apply") throw new Error(`${mismatched.length} staff code(s) match a different name; check them before applying`);
   if (mode === "dry") { console.log("\nDry run only: nothing was changed. Add --apply to write it."); process.exit(0); }
 
@@ -89,7 +92,7 @@ try {
     const totals = { recordCount: rows.length, totalDues: payload.grand.dues, totalDeductions: payload.grand.ded, netPayable: payload.grand.net };
     const [registerImport] = await tx`INSERT INTO salary_register_imports (business_head_id,period_month,source_file_name,source_sha256,imported_by,record_count,totals) VALUES (${head.id},${payload.periodMonth},${payload.sourceFileName},${payload.sourceSha256},${actor.id},${rows.length},${tx.json(totals)}) RETURNING id`;
     let created = 0, updated = 0, newRates = 0, sameRates = 0;
-    for (const { row, person } of plan) {
+    for (const { row, person, confirmed } of plan) {
       const statutory = Object.fromEntries(Object.entries({ ESI: row[F.esiNo], UAN: row[F.uan], PFAccountNumber: row[F.pfAccount] }).filter(([, value]) => value));
       const joined = isoDate(row[F.joined]);
       const [first, ...rest] = row[F.name].trim().split(/\s+/);
@@ -99,6 +102,11 @@ try {
         const old = openJson(person.statutory_details_encrypted);
         [employee] = await tx`UPDATE employees SET guardian_name=coalesce(guardian_name,${row[F.guardian] || null}),department_id=coalesce(department_id,${row[F.department] ? departmentIds[row[F.department]] : null}::uuid),position=CASE WHEN ${Boolean(row[F.position])} AND (position IS NULL OR position IN ('Employee','Worker')) THEN ${row[F.position] || null} ELSE position END,statutory_details_encrypted=${Object.keys(statutory).length ? sealJson({ ...old, ...statutory }) : person.statutory_details_encrypted},source_metadata=coalesce(source_metadata,'{}'::jsonb) || ${tx.json(metadata)},updated_at=now() WHERE id=${person.id} RETURNING id`;
         updated++;
+        if (confirmed) {
+          const [newFirst, ...newRest] = row[F.name].trim().split(/\s+/);
+          await tx`UPDATE employees SET first_name=${newFirst},last_name=${newRest.join(" ") || null},status=CASE WHEN status='archived' THEN 'active'::employment_status ELSE status END,updated_at=now() WHERE id=${person.id}`;
+          await tx`INSERT INTO employee_events (employee_id,event_type,effective_date,new_values,reason,approved_by,created_by) VALUES (${person.id},'salary_register_identity_confirmed',${payload.periodMonth},${tx.json({ nameBefore: `${person.first_name} ${person.last_name || ""}`.trim(), nameAfter: row[F.name], statusBefore: person.status, statusAfter: person.status === "archived" ? "active" : person.status })},'Confirmed by HR as the same person; name taken from the salary register',${actor.id},${actor.id})`;
+        }
       } else {
         [employee] = await tx`INSERT INTO employees (employee_code,business_head_id,department_id,first_name,last_name,guardian_name,position,employment_type,status,date_joined,statutory_details_encrypted,source_metadata) VALUES (${row[F.code]},${head.id},${row[F.department] ? departmentIds[row[F.department]] : null},${first},${rest.join(" ") || null},${row[F.guardian] || null},${row[F.position] || "Employee"},'permanent','active',${joined || payload.periodMonth},${Object.keys(statutory).length ? sealJson(statutory) : null},${tx.json(metadata)}) RETURNING id`;
         await tx`INSERT INTO employee_events (employee_id,event_type,effective_date,new_values,reason,approved_by,created_by) VALUES (${employee.id},'employee_imported',${payload.periodMonth},${tx.json({ employeeCode: row[F.code], businessHead: payload.businessHead, sourceFileName: payload.sourceFileName })},'Imported from the accountant salary register',${actor.id},${actor.id})`;
