@@ -590,7 +590,7 @@ Staff record → **Pay, PF & bank** → **Compensation history** → **Add revis
 Staff record → **Pay, PF & bank** → **Compensation history**: every entry has an **Edit** button (HR / payroll login with `payroll:write`) to correct its start date, annual CTC, monthly gross, basic, allowances and overtime rate, with a required reason.
 `PATCH /api/employees/[id]/compensation/[revisionId]`:
 - the new start date must stay **after the earlier entry's start and before the next entry's start**; the earlier entry's end date is moved to the day before the new start, so periods never overlap or leave a gap;
-- **blocked** when a salary month that used this rate is under review, approved, locked or paid (the message names the months): add a new revision instead, or reopen that month first. A month that is only *calculated* can still be edited;
+- **blocked** when a salary month that used this rate is approved, locked or paid (a month still in Review can be edited; press Calculate again afterwards, Nov 2026) (the message names the months): add a new revision instead, or reopen that month first. A month that is only *calculated* can still be edited;
 - writes `employee_events` (`compensation_revision`, before / after, `corrected: true`) and `audit_events` (`compensation.edit`); the employee's next salary revision date is not touched.
 - Not built: deleting an entry (two identical consecutive entries are harmless; edit one to fix it).
 

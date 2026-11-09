@@ -33,10 +33,10 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       if (next && input.effectiveFrom >= next.effective_from) return { error: `The start date must be before the next entry's start (${next.effective_from}).`, code: 422 };
       const changed = input.effectiveFrom !== row.effective_from || Number(row.annual_ctc) !== input.annualCtc || Number(row.monthly_gross) !== input.monthlyGross || !sameStructure(row.structure, input.structure);
       if (!changed) return { error: "Nothing was changed.", code: 422 };
-      // Salary months that already used this rate and are past the "calculated" stage.
+      // Salary months that already used this rate and are past the review stage (a month in review can still be recalculated).
       const used = await tx<{ month: string; status: string }[]>`
         SELECT to_char(p.period_month,'Mon YYYY') AS month,p.status::text AS status FROM payroll_results r JOIN payroll_periods p ON p.id=r.payroll_period_id
-        WHERE r.employee_id=${id} AND p.status::text IN ('review','approved','locked','paid')
+        WHERE r.employee_id=${id} AND p.status::text IN ('approved','locked','paid')
           AND p.period_month>=date_trunc('month',${row.effective_from}::date)::date
           AND (${row.effective_to}::date IS NULL OR p.period_month<=${row.effective_to}::date)
         ORDER BY p.period_month`;
