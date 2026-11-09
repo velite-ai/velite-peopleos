@@ -74,7 +74,7 @@ export async function GET(request: Request) {
           noSalary: s ? s.no_salary : person.separation_type === "abandonment", note: s?.note || "",
           stoppedComing: person.separation_type === "abandonment", saved: Boolean(s),
           joinDate: person.date_joined, lastWorkingDate: person.last_working_date,
-          presentEquivalent: factsBy.get(person.id)?.present ?? 0, paidLeaveMarked: factsBy.get(person.id)?.paid_leave ?? 0,
+          presentEquivalent: factsBy.get(person.id)?.present ?? 0, paidLeaveMarked: 0, // Leave marks in attendance are not counted; paid leave is typed here
         };
       }),
     });
