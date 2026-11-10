@@ -153,3 +153,16 @@ test("trainee experience certificate states the training period and warns when t
   assert.equal(assumed.warnings.length, 1); assert.match(assumed.warnings[0], /today's date is used/);
   assert.ok(!NEEDS_LAST_WORKING_DAY.includes("trainee_certificate")); // it can be printed straight away
 });
+
+test("a hand-picked letter date must be a real day from 2020 to about a year ahead", async () => {
+  const { letterDateOk } = await import("../lib/letter-rules.ts");
+  const now = new Date("2026-11-10T10:00:00Z");
+  assert.equal(letterDateOk("2026-11-10", now), true);
+  assert.equal(letterDateOk("2026-10-01", now), true);
+  assert.equal(letterDateOk("2027-03-01", now), true);
+  assert.equal(letterDateOk("2062-11-10", now), false);   // typing mistake
+  assert.equal(letterDateOk("2019-12-31", now), false);
+  assert.equal(letterDateOk("2026-02-30", now), false);   // not a real day
+  assert.equal(letterDateOk("10/11/2026", now), false);
+  assert.equal(letterDateOk("", now), false);
+});

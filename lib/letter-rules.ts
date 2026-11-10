@@ -89,6 +89,14 @@ export function referenceNumber(companyName: string, iso: string, serial: number
   return `${companyLetterCode(companyName)}/${financialYear(iso)}/${iso.slice(5, 7)}/${iso.slice(8, 10)}/${serial}`;
 }
 
+/** A letter may be dated by hand: a real calendar day from 1 Jan 2020 up to about a year ahead (typing mistakes such as year 2062 are refused). */
+export function letterDateOk(iso: string, now: Date = new Date()): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return false;
+  const day = new Date(`${iso}T00:00:00Z`);
+  if (Number.isNaN(day.getTime()) || day.toISOString().slice(0, 10) !== iso) return false;
+  return iso >= "2020-01-01" && day.getTime() <= now.getTime() + 400 * 86_400_000;
+}
+
 export function titleFor(gender: string | null | undefined): string {
   const value = (gender || "").trim().toLowerCase();
   if (["male", "m", "man", "mr", "mr."].includes(value)) return "Mr.";

@@ -3,10 +3,10 @@ import { apiError, fail, ok, requireApiUser } from "@/lib/api";
 import { hasPermissionForScope } from "@/lib/auth";
 import { db, type Sql } from "@/lib/database";
 import { openJson } from "@/lib/encryption";
-import { LETTER_LABELS, LETTER_TYPES, NEEDS_LAST_WORKING_DAY, type LetterData, probationMonths, titleFor } from "@/lib/letter-rules";
+import { LETTER_LABELS, LETTER_TYPES, NEEDS_LAST_WORKING_DAY, type LetterData, letterDateOk, probationMonths, titleFor } from "@/lib/letter-rules";
 import { registerLetter } from "@/lib/letter-register";
 
-const schema = z.object({ type: z.enum(LETTER_TYPES as [string, ...string[]]) }).strict();
+const schema = z.object({ type: z.enum(LETTER_TYPES as [string, ...string[]]), date: z.string().refine(value => letterDateOk(value), "Choose a real date (from 2020 to about a year ahead)").optional() }).strict();
 type PersonalDetails = { gender?: string | null; address?: { line1?: string; line2?: string | null; city?: string; state?: string; postalCode?: string } | null };
 
 // Collects everything a printable letter needs and gives it its reference number. HR only.
@@ -42,7 +42,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }
 
     const result = await sql.begin(async tx => {
-      const registered = await registerLetter(tx as unknown as Sql, { owner: { employeeId: id }, businessHeadId: employee.business_head_id, company: employee.company, type, userId: user.id });
+      const registered = await registerLetter(tx as unknown as Sql, { owner: { employeeId: id }, businessHeadId: employee.business_head_id, company: employee.company, type, userId: user.id, date: input.date });
       await tx`INSERT INTO audit_events (actor_user_id,action,entity_type,entity_id,business_head_id,after_data,reason) VALUES (${user.id},'employee_letter.print','employee',${id},${employee.business_head_id},${tx.json({ type, reference: registered.reference })},${`${LETTER_LABELS[type]} opened for printing`})`;
       return registered;
     });

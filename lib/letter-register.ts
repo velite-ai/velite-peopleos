@@ -2,10 +2,11 @@ import type { Sql } from "./database";
 import { referenceNumber } from "./letter-rules";
 
 // Gives a printed letter its reference number (company / financial year / month / day / serial of that company's letters that day).
-// Printing the same letter again the same day keeps the same number. Call inside a transaction.
-export async function registerLetter(tx: Sql, input: { owner: { employeeId: string } | { offerId: string }; businessHeadId: string; company: string; type: string; userId: string }) {
+// Printing the same letter again for the same date keeps the same number. The date is today (India) unless the user picked another letter date. Call inside a transaction.
+export async function registerLetter(tx: Sql, input: { owner: { employeeId: string } | { offerId: string }; businessHeadId: string; company: string; type: string; userId: string; date?: string }) {
   await tx`SELECT pg_advisory_xact_lock(hashtext(${`printed-letters:${input.businessHeadId}`}))`;
-  const [{ today }] = await tx<{ today: string }[]>`SELECT (now() AT TIME ZONE 'Asia/Kolkata')::date::text AS today`;
+  const [{ today: indiaToday }] = await tx<{ today: string }[]>`SELECT (now() AT TIME ZONE 'Asia/Kolkata')::date::text AS today`;
+  const today = input.date || indiaToday; // the letter's date (named today below because the rest of this function and its callers use it that way)
   const employeeId = "employeeId" in input.owner ? input.owner.employeeId : null;
   const offerId = "offerId" in input.owner ? input.owner.offerId : null;
   const [existing] = employeeId
