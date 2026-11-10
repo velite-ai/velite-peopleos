@@ -52,7 +52,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     const reportRows = await sql<{ id: string; employee_code: string; name: string; position: string | null; status: string; business_head: string; business_head_id: string; department_id: string | null }[]>`
       SELECT e.id,e.employee_code,concat_ws(' ',e.first_name,e.last_name) AS name,e.position,e.status,b.name AS business_head,e.business_head_id,e.department_id
       FROM employees e JOIN business_heads b ON b.id=e.business_head_id
-      WHERE e.reporting_manager_id=${id} AND e.status IN ('probation','active','notice_period') ORDER BY b.name,e.first_name,e.last_name`;
+      WHERE e.reporting_manager_id=${id} AND e.status IN ('probation','active','notice_period') ORDER BY b.name,lower(e.first_name),lower(e.last_name)`;
     const directReports = reportRows.filter(row => hasPermissionForScope(user, "people:read", row.business_head_id, row.department_id)).map(({ business_head_id, department_id, ...row }) => row);
     if (canViewCompensation) await sql`INSERT INTO audit_events (actor_user_id,action,entity_type,entity_id,business_head_id,reason) VALUES (${user.id},'employee.compensation_view','employee',${id},${record.business_head_id},'Authorised compensation and salary-register history viewed')`;
     return ok({ employee: employee[0], events, compensation, salaryRegisterLines, separation: separation || null, directReports, fieldAccess: { compensation: canViewCompensation } });

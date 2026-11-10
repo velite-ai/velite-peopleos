@@ -20,7 +20,7 @@ export async function GET(request: Request) {
         (SELECT count(*)::int FROM documents x WHERE x.employee_id=e.id) AS document_count
       FROM employees e JOIN business_heads b ON b.id=e.business_head_id LEFT JOIN departments d ON d.id=e.department_id
       WHERE e.status IN ('probation','active','notice_period') AND (${head}::uuid IS NULL OR e.business_head_id=${head}::uuid)
-      ORDER BY b.name,e.first_name,e.last_name`;
+      ORDER BY b.name,lower(e.first_name),lower(e.last_name)`;
     const people = rows.filter(row => hasPermissionForScope(user, "people:read", row.business_head_id, row.department_id)).map(row => {
       const salaryVisible = hasPermissionForScope(user, "payroll:read", row.business_head_id, row.department_id);
       const missing = missingItems({ departmentName: row.department, workEmail: row.work_email, phone: row.phone, hasPhoto: row.has_photo, hasManager: row.has_manager, hasSalary: salaryVisible ? row.has_salary : null, documentCount: row.document_count });

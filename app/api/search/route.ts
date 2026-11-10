@@ -105,7 +105,7 @@ export async function GET(request: Request) {
             OR e.department_id IN ${sql(ids(peopleScope.departmentIds))}
           )
           AND concat_ws(' ',e.first_name,e.last_name,e.employee_code,e.position,d.name,b.name) ILIKE ${pattern}
-        ORDER BY e.first_name,e.last_name NULLS LAST LIMIT 12
+        ORDER BY lower(e.first_name),lower(e.last_name) NULLS LAST LIMIT 12
       ` : Promise.resolve([] as ScopedRow[]),
       recruitmentScope.any ? sql<ScopedRow[]>`
         SELECT c.id,c.full_name AS title,

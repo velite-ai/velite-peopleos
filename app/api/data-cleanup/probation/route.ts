@@ -19,7 +19,7 @@ export async function GET(request: Request) {
       FROM employees e JOIN business_heads b ON b.id=e.business_head_id
       WHERE e.status='active' AND e.date_joined>=current_date-make_interval(months=>${joinedWithin}::int) AND e.date_joined<=current_date
         AND (${head}::uuid IS NULL OR e.business_head_id=${head}::uuid)
-      ORDER BY e.date_joined DESC,e.first_name`;
+      ORDER BY e.date_joined DESC,lower(e.first_name)`;
     const people = rows.filter(row => hasPermissionForScope(user, "people:write", row.business_head_id, row.department_id)).map(row => ({
       id: row.id, code: row.employee_code, name: row.name.replace(/\s+/g, " ").trim(), position: row.position, company: row.business_head, joined: row.date_joined,
       probationEnd: row.probation_end_date, confirmation: row.confirmation_date, suggestedEnd: addMonths(row.date_joined, probationMonths),
