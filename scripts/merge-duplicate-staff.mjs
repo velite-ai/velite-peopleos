@@ -2,7 +2,7 @@
 // then removes the other from the Staff list (status archived, marked as a duplicate; nothing is erased). See CLAUDE.md section 43.
 //   Preview (changes nothing): TARGET_COMPANY="Velite Healthcare" KEEP_CODE=VEL-110 DROP_CODE=63 node merge-duplicate-staff.mjs
 //   Apply:                     ... node merge-duplicate-staff.mjs --apply
-// Refused if the record to remove has attendance, documents, leave, salary results or loans of its own (those would have to be moved by hand).
+// Refused if the record to remove has attendance the kept record lacks, documents, leave, salary results or loans of its own (those would have to be moved by hand).
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import postgres from "postgres";
 const apply = process.argv.includes("--apply");
@@ -30,7 +30,10 @@ try {
   const keepCounts = await counts(keep.id), dropCounts = await counts(drop.id);
   console.log(`KEEP  ${keep.employee_code}  ${name(keep)}  (${keep.status}, joined ${keep.joined})  `, JSON.stringify(keepCounts));
   console.log(`DROP  ${drop.employee_code}  ${name(drop)}  (${drop.status}, joined ${drop.joined})  `, JSON.stringify(dropCounts));
-  const stuck = ["attendance", "documents", "leave", "salary_results", "loans"].filter(field => dropCounts[field] > 0);
+  // Attendance on the copy is fine when the kept record already has a mark for the same day (a double mark); any day only the copy has blocks the merge.
+  const onlyOnCopy = dropCounts.attendance ? (await sql`SELECT count(*)::int AS n FROM attendance_days d WHERE d.employee_id=${drop.id} AND NOT EXISTS (SELECT 1 FROM attendance_days k WHERE k.employee_id=${keep.id} AND k.attendance_date=d.attendance_date)`)[0].n : 0;
+  if (dropCounts.attendance && !onlyOnCopy) console.log(`  the ${dropCounts.attendance} attendance day(s) on the copy are all already marked on the kept record: left as they are on the archived copy`);
+  const stuck = ["documents", "leave", "salary_results", "loans"].filter(field => dropCounts[field] > 0); if (onlyOnCopy) stuck.unshift("attendance (days the kept record does not have)");
   if (stuck.length) throw new Error(`The record to remove has its own ${stuck.join(", ")}; move those first (nothing was changed)`);
   const lines = await sql`SELECT l.id,l.import_id,l.register_type,l.net_payable,i.period_month::text AS month FROM salary_register_lines l JOIN salary_register_imports i ON i.id=l.import_id WHERE l.employee_id=${drop.id} ORDER BY i.period_month`;
   const clash = await sql`SELECT l.import_id FROM salary_register_lines l WHERE l.employee_id=${keep.id} AND l.import_id IN ${sql(lines.length ? lines.map(line => line.import_id) : [null])}`;
