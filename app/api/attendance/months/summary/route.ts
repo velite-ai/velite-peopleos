@@ -52,7 +52,7 @@ export async function GET(request: Request) {
       ) c
       WHERE e.date_joined<${input.periodMonth}::date+interval '1 month'
         AND (e.last_working_date IS NULL OR e.last_working_date>=${input.periodMonth}::date)
-        AND e.status NOT IN ('candidate','preboarding','archived')
+        AND e.status NOT IN ('candidate','preboarding','archived') AND NOT e.payroll_excluded
         AND (${input.businessHeadId}::uuid IS NULL OR e.business_head_id=${input.businessHeadId}::uuid)
         AND (${broad} OR e.id=${actor?.id || null}::uuid OR e.reporting_manager_id=${actor?.id || null}::uuid)
       ORDER BY e.employee_code`;

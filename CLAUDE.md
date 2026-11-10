@@ -756,3 +756,15 @@ For companies with `business_heads.paid_days_rule = 'velite_table'` (migration 0
 - Login used: `velite@velite.in` unless `IMPORT_ACTOR_EMAIL` is set. Needs `DATABASE_URL` and `DATA_ENCRYPTION_KEY` (both set inside the web container).
 - The sheet's earned wages are **not recalculated**: they are stored exactly as printed. Fields not on the sheet (Pharmaceuticals has no joining date, designation or department) stay empty.
 - **Same person under a different spelling / removed record:** add `"confirmedSamePerson": ["63"]` (staff codes) to the JSON. The dry run then says *CONFIRMED SAME PERSON*; `--apply` renames the record to the sheet's name, makes an archived record Active again, and writes an `employee_events` row (`salary_register_identity_confirmed`). Without the key a name mismatch still blocks `--apply`. Used for Healthcare code 63 (Shiv Sharma, archived as "Shiv Kumar"), Nov 2026.
+
+---
+
+## 42. People left out of salary calculation — Nov 2026
+
+`employees.payroll_excluded` (migration 030, default false) leaves a person on the staff list but out of the **attendance month summary and lock** (`app/api/attendance/months/route.ts`, `.../months/summary/route.ts`), the **Salary inputs** panel and the **salary calculation** (`app/api/payroll/inputs|run`). Their missing attendance days no longer block locking the month, and they get no salary line. Nothing else about the record changes (they still show in Staff and the daily Attendance sheet).
+Set or clear it with `scripts/set-payroll-exclusion.mjs` (preview first, then `--apply`; writes `employee_events` `payroll_exclusion` and `audit_events` `employee.payroll_excluded|included`):
+```bash
+docker exec -i -e TARGET_COMPANY="Velite Healthcare" -e TARGET_CODES=001,053 web-t12xccwccugnf8hnjzfabydb sh -c 'cat > /app/x.mjs && node /app/x.mjs' < /opt/velite-deploy/src/scripts/set-payroll-exclusion.mjs
+# add --apply (after x.mjs) to write; add -e EXCLUDE=false to put them back
+```
+A month whose attendance is already locked keeps its old list: reopen it, then lock and calculate again. Used for Healthcare codes 001 (Sanjiv Kumar Verma) and 053 (Sangeeta Verma): nothing is paid to them. Not built: a button for this in the staff record.

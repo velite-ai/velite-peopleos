@@ -42,7 +42,7 @@ export async function GET(request: Request) {
              (SELECT s.separation_type FROM separations s WHERE s.employee_id=e.id ORDER BY s.submitted_date DESC LIMIT 1) AS separation_type
       FROM employees e
       WHERE e.business_head_id=${period.business_head_id} AND e.date_joined<=${monthEnd}::date AND (e.last_working_date IS NULL OR e.last_working_date>=${monthStart}::date)
-        AND e.status NOT IN ('candidate','preboarding','archived')
+        AND e.status NOT IN ('candidate','preboarding','archived') AND NOT e.payroll_excluded
       ORDER BY e.employee_code`;
     const [setup] = await sql<{ paid_days_rule: string; holidays: string[] }[]>`SELECT b.paid_days_rule,p.national_holidays::text[] AS holidays FROM business_heads b JOIN payroll_periods p ON p.business_head_id=b.id WHERE p.id=${period.id}`;
     const dayFacts = await sql<{ employee_id: string; present: number; paid_leave: number }[]>`
