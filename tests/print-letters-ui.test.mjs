@@ -26,7 +26,10 @@ test("the letter page is a preview first: nothing prints on its own, and the PDF
 test("the paper layout leaves room for the company letterhead and hides the toolbar when printing", async () => {
   const css = await read("app/globals.css");
   assert.match(css, /\.letter-sheet\{--letter-top:4\.5cm/);
-  assert.match(css, /@page\{size:A4;margin:0\}/);
+  assert.match(css, /@page letter\{size:A4 portrait;margin:0\}/); // letters print on A4 portrait, no browser margins or headers
+  assert.match(css, /\.letter-page\{page:letter\}/);
+  assert.match(css, /@page diwali\{size:A4 landscape;margin:12mm\}/); // the Diwali print must not leak into the letters
+  assert.doesNotMatch(css, /@page\{size:A4 landscape/);
   assert.match(css, /\.no-print\{display:none!important\}/);
   assert.match(css, /\.letter-second\{break-before:page\}/);
 });
@@ -61,4 +64,16 @@ test("offer letters can be printed from the Hiring screen, for a candidate's off
   assert.match(migration, /'trainee_certificate'/);
   const employeeRoute = await read("app/api/employees/[id]/print-letter/route.ts");
   assert.match(employeeRoute, /endDateAssumed/);
+});
+
+test("the letter date can be changed on the preview and gives the letter the reference for that date", async () => {
+  const page = await read("app/letters/print/page.tsx");
+  assert.match(page, /type="date"/);
+  assert.match(page, /changeDate/);
+  for (const file of ["app/api/employees/[id]/print-letter/route.ts", "app/api/recruitment/offers/[id]/print-letter/route.ts"]) {
+    const route = await read(file);
+    assert.match(route, /letterDateOk/);
+    assert.match(route, /date/);
+  }
+  assert.match(await read("lib/letter-register.ts"), /input\.date \|\| indiaToday/);
 });

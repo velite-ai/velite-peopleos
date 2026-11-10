@@ -1,14 +1,17 @@
 import { apiError, fail, ok, requireApiUser } from "@/lib/api";
 import { db, type Sql } from "@/lib/database";
-import { LETTER_LABELS, type LetterData, titleFor } from "@/lib/letter-rules";
+import { LETTER_LABELS, type LetterData, letterDateOk, titleFor } from "@/lib/letter-rules";
 import { registerLetter } from "@/lib/letter-register";
 
 type Terms = { title?: string; address?: string; probationMonths?: number | string; monthlySalary?: number | string };
 
 // Collects what the offer letter for a candidate (Hiring screen) needs and gives it its reference number.
-export async function POST(_: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
+    const body = (await request.json().catch(() => ({}))) as { date?: unknown };
+    const date = typeof body.date === "string" && body.date ? body.date : undefined;
+    if (date && !letterDateOk(date)) return fail("Choose a real date (from 2020 to about a year ahead)", 422);
     const sql = db();
     const [offer] = await sql<{
       id: string; offered_position: string; offered_ctc: string; proposed_joining_date: string; terms: Terms | null;
@@ -24,7 +27,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ id: strin
     const addressLines = String(terms.address || "").split(/\r?\n/).map(line => line.trim()).filter(Boolean);
 
     const result = await sql.begin(async tx => {
-      const registered = await registerLetter(tx as unknown as Sql, { owner: { offerId: id }, businessHeadId: offer.business_head_id, company: offer.company, type: "offer", userId: user.id });
+      const registered = await registerLetter(tx as unknown as Sql, { owner: { offerId: id }, businessHeadId: offer.business_head_id, company: offer.company, type: "offer", userId: user.id, date });
       await tx`INSERT INTO audit_events (actor_user_id,action,entity_type,entity_id,business_head_id,after_data,reason) VALUES (${user.id},'employee_letter.print','candidate_offer',${id},${offer.business_head_id},${tx.json({ type: "offer", reference: registered.reference })},${`${LETTER_LABELS.offer} opened for printing`})`;
       return registered;
     });

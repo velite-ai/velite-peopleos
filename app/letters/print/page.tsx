@@ -14,6 +14,8 @@ export default function PrintLetterPage() {
   const [withLetterhead, setWithLetterhead] = useState(true);
   const [headJpeg, setHeadJpeg] = useState<Uint8Array | null>(null);
   const started = useRef(false);
+  const target = useRef<{ address: string; type: LetterType } | null>(null);
+  const [dateBusy, setDateBusy] = useState(false);
 
   useEffect(() => {
     if (started.current) return;
@@ -24,10 +26,23 @@ export default function PrintLetterPage() {
     try { const saved = window.localStorage.getItem("velite_letter_top_cm"); if (saved) setTop(saved); } catch { /* the default is fine */ }
     // An offer letter printed from the Hiring screen belongs to a candidate's offer; every other letter belongs to a staff record.
     const address = offer ? `/api/recruitment/offers/${encodeURIComponent(offer)}/print-letter` : `/api/employees/${encodeURIComponent(employee as string)}/print-letter`;
-    fetch(address, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ type }) })
-      .then(async response => { const body = await response.json().catch(() => null); if (!response.ok) throw new Error(body?.error?.message || "The letter could not be prepared."); return body.data as LetterData; })
-      .then(setData).catch(problem => setError((problem as Error).message));
+    target.current = { address, type };
+    loadLetter().then(setData).catch(problem => setError((problem as Error).message));
   }, []);
+
+  // Asks the server for the letter; with a date it is dated (and numbered) for that day instead of today.
+  async function loadLetter(date?: string): Promise<LetterData> {
+    const current = target.current; if (!current) throw new Error("The letter link is not complete.");
+    const response = await fetch(current.address, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ type: current.type, ...(date ? { date } : {}) }) });
+    const body = await response.json().catch(() => null);
+    if (!response.ok) throw new Error(body?.error?.message || "The letter could not be prepared.");
+    return body.data as LetterData;
+  }
+  async function changeDate(value: string) {
+    if (!value || !data || value === data.date) return;
+    setDateBusy(true);
+    try { setData(await loadLetter(value)); setError(""); } catch (problem) { window.alert((problem as Error).message); } finally { setDateBusy(false); }
+  }
 
   const design = data ? letterheadFor(data.company) : undefined;
   // The company's letterhead picture, fetched once the company is known. Without it the letter simply keeps the plain layout.
@@ -63,10 +78,11 @@ export default function PrintLetterPage() {
       <button type="button" className="primary" onClick={() => window.print()}>Print</button>
       <button type="button" onClick={download}>Download PDF</button>
       <button type="button" onClick={() => window.close()}>Close</button>
+      <label>Letter date<input type="date" value={data.date} min="2020-01-01" disabled={dateBusy} onChange={event => changeDate(event.target.value)} /></label>
       <label>Space at top for the letterhead (cm)<input type="number" min="0" max="12" step="0.5" value={top} onChange={event => changeTop(event.target.value)} /></label>
       {design && headJpeg && <label className="letter-check"><input type="checkbox" checked={withLetterhead} onChange={event => setWithLetterhead(event.target.checked)} /> Show the company letterhead in the preview and the downloaded PDF</label>}
       {!useHead && <label className="letter-check"><input type="checkbox" checked={withCompany} onChange={event => setWithCompany(event.target.checked)} /> Put the company name at the top of the downloaded PDF</label>}
-      <p className="letter-hint">Check the letter below. Nothing is printed until you press Print. Print is for your own letterhead paper, so it never includes the letterhead picture. {useHead ? "The downloaded PDF carries the company letterhead." : "The downloaded PDF has no letterhead, so it carries the company name instead."}</p>
+      <p className="letter-hint">Check the letter below. Nothing is printed until you press Print. Changing the letter date also gives the letter the reference number for that date. Print is for your own letterhead paper, so it never includes the letterhead picture. {useHead ? "The downloaded PDF carries the company letterhead." : "The downloaded PDF has no letterhead, so it carries the company name instead."}</p>
       {letter.warnings.map(warning => <p className="letter-warning" key={warning}>⚠ {warning}</p>)}
     </div>
     <article className={`letter-sheet${useHead ? " with-head" : ""}`} style={sheetStyle}>
