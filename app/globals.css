@@ -224,12 +224,15 @@ html,body{font-family:"Segoe UI",system-ui,-apple-system,Roboto,"Helvetica Neue"
 .letter-note{margin-bottom:2pt!important}
 .letter-accept{display:flex;justify-content:space-between}
 .letter-accept-by{display:flex;flex-direction:column;align-items:center;gap:48pt}
+/* Letters print on A4 portrait with no margins from the browser (the sheet carries its own margins), so the browser adds no date / address headers and footers.
+   Named page: other screens (e.g. the landscape Diwali print below) must not change it. */
+@page letter{size:A4 portrait;margin:0}
+.letter-page{page:letter}
 @media print{
-  @page{size:A4;margin:0}
   html,body{background:#fff!important}
   .no-print{display:none!important}
   .letter-page{background:#fff;padding:0;min-height:0}
-  .letter-sheet{box-shadow:none;margin:0;width:210mm}
+  .letter-sheet{box-shadow:none;margin:0;width:210mm;min-height:296mm}
   .letter-second{break-before:page}
 }
 .letter-toolbar .letter-hint{flex:1 1 100%;margin:0;color:#4d5a53;font-size:14px}
@@ -373,8 +376,9 @@ main[data-area] .tr.th>span{color:color-mix(in srgb,var(--c) 60%,#222)}
 .gift-progress{position:relative;height:30px;border-radius:15px;background:#e5eae7;margin:0 0 18px;overflow:hidden}.gift-progress i{position:absolute;inset:0 auto 0 0;background:linear-gradient(90deg,#16a06b,#34d399)}.gift-progress span{position:relative;display:block;line-height:30px;text-align:center;font-weight:600;color:#10261d}
 .gift-two{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}@media(max-width:1050px){.gift-two{grid-template-columns:1fr}}
 .gift-items-table .gift-item-row{cursor:pointer}.gift-items-table .gift-item-row:hover{background:#fff7ed}.gift-item-detail{display:none}.gift-item-detail.open{display:table-row}.gift-item-detail ul{margin:6px 0 0;padding-left:18px}.gift-item-detail li small{margin-left:8px}.gift-item-detail .muted{color:#6b7280}
+@page diwali{size:A4 landscape;margin:12mm}
+main[data-area="diwali-gifts"]{page:diwali}
 @media print{
-  @page{size:A4 landscape;margin:12mm}
   html,body{background:#fff!important}
   .sidebar,.topbar,.gift-noprint,.toast,.mobile-menu{display:none!important}
   .app-shell{display:block!important}main{padding:0!important;margin:0!important;display:block!important}
