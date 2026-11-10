@@ -768,3 +768,14 @@ docker exec -i -e TARGET_COMPANY="Velite Healthcare" -e TARGET_CODES=001,053 web
 # add --apply (after x.mjs) to write; add -e EXCLUDE=false to put them back
 ```
 A month whose attendance is already locked keeps its old list: reopen it, then lock and calculate again. Used for Healthcare codes 001 (Sanjiv Kumar Verma) and 053 (Sangeeta Verma): nothing is paid to them. Not built: a button for this in the staff record.
+
+---
+
+## 43. Combining two records of the same person — Nov 2026
+
+`scripts/merge-duplicate-staff.mjs` (preview by default, `--apply` writes; env `TARGET_COMPANY`, `KEEP_CODE`, `DROP_CODE`). Keeps one record and, in one transaction: moves the imported salary-sheet rows (`salary_register_lines`) to it, adds the sheet's pay rate (only rates created by the register import, and only if they differ from what the kept record has), fills empty statutory numbers and parent / spouse name, then sets the other record to `archived` with a `profile_change` history entry and audit entries `employee.marked_duplicate` / `employee.records_combined`. Nothing is deleted.
+**Refused** if the record to remove has its own attendance, documents, leave, salary results or loans. Used for Healthcare: `VEL-110` Shiv Kumar (kept: attendance, 10 documents) and `63` Shiv Sharma (created by the Oct 2026 register import), Nov 2026.
+```bash
+docker exec -i -e TARGET_COMPANY="Velite Healthcare" -e KEEP_CODE=VEL-110 -e DROP_CODE=63 web-t12xccwccugnf8hnjzfabydb sh -c 'cat > /app/m.mjs && node /app/m.mjs' < /opt/velite-deploy/src/scripts/merge-duplicate-staff.mjs
+# add --apply after m.mjs to write
+```
