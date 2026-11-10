@@ -779,3 +779,9 @@ A month whose attendance is already locked keeps its old list: reopen it, then l
 docker exec -i -e TARGET_COMPANY="Velite Healthcare" -e KEEP_CODE=VEL-110 -e DROP_CODE=63 web-t12xccwccugnf8hnjzfabydb sh -c 'cat > /app/m.mjs && node /app/m.mjs' < /opt/velite-deploy/src/scripts/merge-duplicate-staff.mjs
 # add --apply after m.mjs to write
 ```
+
+---
+
+## 44. Extra unpaid days in Salary inputs — Nov 2026
+
+Salary inputs has a new column **Extra unpaid days** (`payroll_inputs.extra_unpaid_days`, migration 031; whole or half days). It takes days off a person's pay **on top of the attendance**, for when the accountant's sheet pays fewer days than the attendance marks (found comparing Healthcare October 2026: Aishwerya 3, Ambika 1, Rajeev 1, Lovepreet 1, Meenakshi 1, Tisha 4, Surbhi 5). Applied in `applySalaryInputs` (`lib/payroll-input-rules.ts`, unit tested) and, for Velite-table companies, after the paid-days table in `app/api/payroll/run/route.ts`. Paid leave is applied first; the extra days can never exceed the days still paid. The trace keeps `extraUnpaidDays` / `extraUnpaidApplied`; changes are audited as `payroll.inputs`. Attendance itself is not changed, so use it only when the sheet's days are the ones to pay.
