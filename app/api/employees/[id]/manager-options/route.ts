@@ -20,7 +20,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       SELECT e.id,e.employee_code,e.first_name,e.last_name,e.position,e.business_head_id,b.name AS business_head
       FROM employees e JOIN business_heads b ON b.id=e.business_head_id
       WHERE e.id<>${id} AND e.status IN ('probation','active','notice_period') AND e.id NOT IN (SELECT id FROM below)
-      ORDER BY b.name,e.first_name,e.last_name LIMIT 2000`;
+      ORDER BY b.name,lower(e.first_name),lower(e.last_name) LIMIT 2000`;
     return ok(rows);
   } catch (error) { return apiError(error); }
 }
