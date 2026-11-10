@@ -41,7 +41,32 @@ test("overtime adds to approved hours and uses basic / days / 8 when no rate is 
 });
 
 test("cleanInput removes negatives, rounds leave to half days and reads text flags", () => {
-  assert.deepEqual(cleanInput({ paidLeaveDays: "1.3", overtimeHours: -2, advanceDeducted: "500", noSalary: "true" }), { paidLeaveDays: 1.5, overtimeHours: 0, advanceDeducted: 500, noSalary: true });
+  assert.deepEqual(cleanInput({ paidLeaveDays: "1.3", overtimeHours: -2, advanceDeducted: "500", noSalary: "true" }), { paidLeaveDays: 1.5, extraUnpaidDays: 0, overtimeHours: 0, advanceDeducted: 500, noSalary: true });
   assert.deepEqual(cleanInput({}), NO_INPUT);
   assert.equal(cleanInput({ paidLeaveDays: "abc" }).paidLeaveDays, 0);
+});
+
+test("extra unpaid days take days off on top of attendance (Aishwerya: 31 paid by attendance, sheet pays 28)", () => {
+  const r = applySalaryInputs({ ...facts, unpaidDays: 0 }, { ...NO_INPUT, extraUnpaidDays: 3 });
+  assert.equal(r.payableDays, 28); assert.equal(r.unpaidDays, 3); assert.equal(r.extraUnpaidApplied, 3);
+});
+
+test("extra unpaid days add to the attendance's unpaid days and work in half days", () => {
+  const r = applySalaryInputs(facts, { ...NO_INPUT, extraUnpaidDays: 1.5 });
+  assert.equal(r.unpaidDays, 3.5); assert.equal(r.payableDays, 27.5);
+});
+
+test("extra unpaid days can never take more than the days still paid", () => {
+  const r = applySalaryInputs({ ...facts, expectedDays: 10, unpaidDays: 4 }, { ...NO_INPUT, extraUnpaidDays: 30 });
+  assert.equal(r.payableDays, 0); assert.equal(r.extraUnpaidApplied, 6);
+});
+
+test("paid leave is applied first, then the extra unpaid days", () => {
+  const r = applySalaryInputs(facts, { ...NO_INPUT, paidLeaveDays: 2, extraUnpaidDays: 1 });
+  assert.equal(r.unpaidDays, 1); assert.equal(r.payableDays, 30);
+});
+
+test("cleanInput keeps extra unpaid days in half days and never negative", () => {
+  assert.equal(cleanInput({ extraUnpaidDays: "2.3" }).extraUnpaidDays, 2.5);
+  assert.equal(cleanInput({ extraUnpaidDays: -4 }).extraUnpaidDays, 0);
 });
