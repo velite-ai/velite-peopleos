@@ -91,3 +91,22 @@ test("the Hub call sends a classic anon key as bearer too, but a publishable key
   assert.equal(seen[1].headers.authorization, undefined);
   assert.match(seen[1].url, /\/rest\/v1\/rpc\/hub_careers_task$/);
 });
+
+test("a notification link opens the right area: ?module=Name, or the old calendar links", async () => {
+  const { notificationModule } = await import("../lib/notification-links.ts");
+  const known = ["Overview", "Recruitment", "HR Calendar"];
+  assert.equal(notificationModule("/?module=Recruitment", known), "Recruitment");
+  assert.equal(notificationModule("/calendar?eventId=abc", known), "HR Calendar");
+  assert.equal(notificationModule("/?module=Nonsense", known), null);
+  assert.equal(notificationModule("/", known), null);
+  assert.equal(notificationModule(null, known), null);
+  assert.equal(notificationModule("https://evil.example/?module=Recruitment", known), "Recruitment"); // only the area name is used, never the address
+});
+
+test("the bell opens a list instead of jumping to the calendar", async () => {
+  const page = await readFile("app/page.tsx", "utf8");
+  assert.match(page, /notice-menu/);
+  assert.match(page, /Mark all as read/);
+  assert.doesNotMatch(page, /function openNotifications/);
+  assert.match(await readFile("app/api/public/careers/route.ts", "utf8"), /\?module=Recruitment/);
+});
