@@ -485,7 +485,7 @@ async function claimHubTasks() {
     SET hub_status='sending',hub_attempts=a.hub_attempts+1,hub_lease_owner=${workerId},hub_leased_until=${leaseUntil()}
     FROM due,business_heads b
     WHERE a.id=due.id AND b.id=a.business_head_id
-    RETURNING a.id,a.full_name,a.email,a.phone,a.position,a.city,a.message,a.hub_attempts,b.name AS company
+    RETURNING a.id,a.full_name,a.email,a.phone,a.position,a.city,a.message,a.resume_url,a.hub_attempts,b.name AS company
   `);
 }
 

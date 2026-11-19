@@ -16,9 +16,11 @@ function corsHeaders(origin: string | null, list: string[]): Record<string, stri
 }
 const reply = (body: unknown, status: number, headers: Record<string, string>) => NextResponse.json(body, { status, headers });
 
+// A server-side form (Wix Automations "Send HTTP request" cannot send a browser Origin) proves itself with CAREERS_FORM_KEY, as header x-careers-key
+// or as ?key=... in the address (Wix lets you add query parameters).
 function formKeyOk(request: Request): boolean {
   const expected = process.env.CAREERS_FORM_KEY || "";
-  const given = request.headers.get("x-careers-key") || "";
+  const given = request.headers.get("x-careers-key") || new URL(request.url).searchParams.get("key") || "";
   if (!expected || !given) return false;
   const a = createHash("sha256").update(expected).digest(); const b = createHash("sha256").update(given).digest();
   return timingSafeEqual(a, b);
@@ -35,7 +37,8 @@ export async function POST(request: Request) {
   const origin = request.headers.get("origin");
   const cors = corsHeaders(origin, list);
   try {
-    if (!originAllowed(origin, list) && !formKeyOk(request)) return reply({ error: { message: "Not allowed" } }, 403, cors);
+    const viaKey = formKeyOk(request);
+    if (!originAllowed(origin, list) && !viaKey) return reply({ error: { message: "Not allowed" } }, 403, cors);
     if (Number(request.headers.get("content-length") || 0) > MAX_BODY) return reply({ error: { message: "That is too large." } }, 413, cors);
 
     const type = request.headers.get("content-type") || "";
@@ -54,7 +57,8 @@ export async function POST(request: Request) {
     const ip = (request.headers.get("x-forwarded-for") || "").split(",")[0].trim() || "unknown";
     const ipHash = createHash("sha256").update(`${ip}|${process.env.AUTH_SECRET || ""}`).digest("hex");
     const [load] = await sql<{ mine: number; all: number }[]>`SELECT count(*) FILTER (WHERE ip_hash=${ipHash} AND created_at>now()-interval '1 hour')::int AS mine, count(*) FILTER (WHERE created_at>now()-interval '10 minutes')::int AS all FROM career_applications WHERE created_at>now()-interval '1 hour'`;
-    if (load.mine >= 5 || load.all >= 60) return reply({ error: { message: "Too many applications right now. Please try again later." } }, 429, { ...cors, "retry-after": "600" });
+    // Every application sent by a server-side form comes from the same address (Wix), so only the overall limit applies to those.
+    if ((!viaKey && load.mine >= 5) || load.all >= 60) return reply({ error: { message: "Too many applications right now. Please try again later." } }, 429, { ...cors, "retry-after": "600" });
 
     const company = process.env.CAREERS_DEFAULT_COMPANY || "Velite Healthcare";
     const [head] = await sql<{ id: string; name: string }[]>`SELECT id,name FROM business_heads WHERE name=${company} AND active=true`;
@@ -63,9 +67,9 @@ export async function POST(request: Request) {
     const config = hubConfig();
     const saved = await sql.begin(async tx => {
       const [candidate] = await tx<{ id: string }[]>`INSERT INTO candidates (business_head_id,full_name,email,phone,position,source,consented_at) VALUES (${head.id},${app.fullName},${app.email},${app.phone},${app.position},'Website',now()) RETURNING id`;
-      const notes = `Applied on the careers form.${app.city ? ` City: ${app.city}.` : ""}${app.message ? ` Message: ${app.message.slice(0, 500)}` : ""}`;
+      const notes = `Applied on the careers form.${app.city ? ` City: ${app.city}.` : ""}${app.message ? ` Message: ${app.message.slice(0, 500)}` : ""}${app.resumeUrl ? ` Resume: ${app.resumeUrl}` : ""}`;
       await tx`INSERT INTO candidate_stage_events (candidate_id,to_stage,notes) VALUES (${candidate.id},'applied',${notes})`;
-      const [row] = await tx<{ id: string }[]>`INSERT INTO career_applications (full_name,email,phone,position,city,message,consented_at,business_head_id,candidate_id,source_origin,ip_hash,user_agent,hub_status,hub_attempts,hub_lease_owner,hub_leased_until) VALUES (${app.fullName},${app.email},${app.phone},${app.position},${app.city},${app.message},now(),${head.id},${candidate.id},${origin},${ipHash},${(request.headers.get("user-agent") || "").slice(0, 300)},${config ? "sending" : "off"},${config ? 1 : 0},${config ? "web" : null},${config ? new Date(Date.now() + 90_000) : null}) RETURNING id`;
+      const [row] = await tx<{ id: string }[]>`INSERT INTO career_applications (full_name,email,phone,position,city,message,resume_url,consented_at,business_head_id,candidate_id,source_origin,ip_hash,user_agent,hub_status,hub_attempts,hub_lease_owner,hub_leased_until) VALUES (${app.fullName},${app.email},${app.phone},${app.position},${app.city},${app.message},${app.resumeUrl},now(),${head.id},${candidate.id},${origin},${ipHash},${(request.headers.get("user-agent") || "").slice(0, 300)},${config ? "sending" : "off"},${config ? 1 : 0},${config ? "web" : null},${config ? new Date(Date.now() + 90_000) : null}) RETURNING id`;
       const title = `New job application: ${app.position}`;
       const body = [app.fullName, app.phone, app.email, app.city].filter(Boolean).join(" · ");
       await tx`INSERT INTO notifications (recipient_user_id,business_head_id,title,body,action_path,deliver_on)
@@ -78,7 +82,7 @@ export async function POST(request: Request) {
 
     if (config) {
       try {
-        const task = buildHubTask({ full_name: app.fullName, position: app.position, phone: app.phone, email: app.email, city: app.city, message: app.message }, head.name, process.env.APP_URL);
+        const task = buildHubTask({ full_name: app.fullName, position: app.position, phone: app.phone, email: app.email, city: app.city, message: app.message, resume_url: app.resumeUrl }, head.name, process.env.APP_URL);
         const taskId = await sendToHub(task, config, 6000);
         await sql`UPDATE career_applications SET hub_status='sent',hub_task_id=${taskId},hub_sent_at=now(),hub_lease_owner=NULL,hub_leased_until=NULL,hub_error=NULL WHERE id=${saved.id}`;
       } catch (error) {
