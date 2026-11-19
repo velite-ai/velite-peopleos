@@ -827,3 +827,5 @@ document.getElementById('careers-form').addEventListener('submit', async (event)
 });
 </script>
 ```
+
+**Notification bell (Nov 2026).** The bell used to mark every notification read and jump to the HR calendar, so nobody could read a notification (the careers ones included). It now opens a list (`notice-menu` in `app/page.tsx`): unread ones with a red dot, newest first, **Mark all as read**, and a click marks that one read and opens its area. A notification's `action_path` carries the area as `/?module=Recruitment` (calendar reminders keep `/calendar?eventId=...`); `notificationModule` in `lib/notification-links.ts` (unit tested) turns it into the area, and `/?module=Name` also opens that area on page load, so email links work. Careers notifications now use `/?module=Recruitment`. The list is loaded once when the page opens (no live refresh yet).

@@ -3,6 +3,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
 
 import { FormEvent,useCallback,useEffect,useState } from "react";
+import { notificationModule } from "@/lib/notification-links";
 import { OperationsWorkspace } from "@/components/operations-workspace";
 import { PerformanceWorkspace } from "@/components/performance-workspace";
 import { HrCalendarWorkspace } from "@/components/hr-calendar-workspace";
@@ -116,7 +117,9 @@ export default function Home() {
   const [attendance, setAttendance] = useState<AttendanceRow[]>([]);
   const [calendarEvents,setCalendarEvents]=useState<CalendarDisplay[]>([]);
   const [sessionUser,setSessionUser]=useState<{fullName:string;mustChangePassword:boolean;mfaEnrollmentRequired:boolean;giftRegister?:boolean;roles:{code:string;businessHeadId:string|null;departmentId:string|null}[]} | null>(null);
-  const [notifications,setNotifications]=useState<{unread:number;items:{id:string}[]}>({unread:0,items:[]});
+  type NoticeItem={id:string;title?:string;body?:string|null;action_path?:string|null;read_at?:string|null;created_at?:string};
+  const [notifications,setNotifications]=useState<{unread:number;items:NoticeItem[]}>({unread:0,items:[]});
+  const [showNotices,setShowNotices]=useState(false);
   const [loading, setLoading] = useState(true);
   const [showMore,setShowMore]=useState(false);
   const [counts,setCounts]=useState<WorkCounts>({pendingLeave:null,openHelpdesk:null,payrollThisMonth:null});
@@ -129,6 +132,8 @@ export default function Home() {
   const canAdmin = Boolean(sessionUser?.roles?.some(role => ["SUPER_ADMIN", "HR_ADMIN"].includes(role.code)));
   const flash=useCallback((message:string)=>{setToast(message);window.setTimeout(()=>setToast(""),2600)},[]);
 
+  // A link such as /?module=Recruitment (from a notification email) opens that area.
+  useEffect(() => { const wanted = new URLSearchParams(window.location.search).get('module'); if (wanted && Object.keys(LABEL).includes(wanted)) setActive(wanted as Module); }, []);
   useEffect(() => {
     Promise.all([fetch("/api/business-heads"),fetch("/api/auth/me"),fetch('/api/notifications')]).then(async ([response,userResponse,notificationResponse]) => {
       let broadAccess=false;if(userResponse.ok){const userBody=await userResponse.json();if(userBody.data?.mustChangePassword){window.location.assign('/change-password');return;}if(userBody.data?.mfaEnrollmentRequired){window.location.assign('/security');return;}setSessionUser(userBody.data);broadAccess=Boolean(userBody.data?.roles?.some((role:any)=>role.code==='SUPER_ADMIN'||(role.code!=='EMPLOYEE'&&!role.businessHeadId&&!role.departmentId)));if(userBody.data?.roles?.length&&userBody.data.roles.every((role:any)=>role.code==='EMPLOYEE'))setActive('My Workspace');}
@@ -191,7 +196,10 @@ export default function Home() {
   },[query,head]);
 
   async function logout(){await fetch('/api/auth/logout',{method:'POST'});window.location.assign('/login');}
-  async function openNotifications(){const ids=notifications.items.filter(Boolean).map(item=>item.id);if(ids.length)await fetch('/api/notifications',{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({ids})});setNotifications(current=>({...current,unread:0}));setActive('HR Calendar');}
+  // The bell opens a list of notifications (it used to mark everything read and jump to the HR calendar). Nothing is marked read until it is clicked or "Mark all as read" is pressed.
+  async function markNoticesRead(ids:string[]){if(!ids.length)return;try{await fetch('/api/notifications',{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify({ids})});}catch{/* the list still updates; it is marked again next time */}const now=new Date().toISOString();setNotifications(current=>{const items=current.items.map(item=>ids.includes(item.id)&&!item.read_at?{...item,read_at:now}:item);return{items,unread:items.filter(item=>!item.read_at).length};});}
+  function toggleNotices(){setShowNotices(value=>!value);setShowQuick(false);}
+  async function openNotice(item:NoticeItem){await markNoticesRead([item.id]);setShowNotices(false);const target=notificationModule(item.action_path,Object.keys(LABEL));if(target)setActive(target as Module);}
   function openSearchResult(result:GlobalSearchItem){if(result.businessHeadId&&heads.some(item=>item.id===result.businessHeadId))setHead(result.businessHeadId);if(result.module==='People'&&String(result.status).toLowerCase()==='archived')setPeopleFilter('archived');setActive(result.module);setQuery("");setSearchGroups([]);setSearchOpen(false);flash(`${result.title} opened in ${result.module}.`)}
 
   return (
@@ -218,7 +226,12 @@ export default function Home() {
           <div className="global-search"><span>⌕</span><input value={query} onChange={e=>{setQuery(e.target.value);setSearchOpen(true)}} onFocus={()=>setSearchOpen(true)} onBlur={()=>window.setTimeout(()=>setSearchOpen(false),120)} onKeyDown={event=>{if(event.key==='Escape'){setSearchOpen(false);event.currentTarget.blur()}}} placeholder="Search staff by name or code…" role="combobox" aria-autocomplete="list" aria-expanded={searchOpen&&query.trim().length>=2} aria-controls="global-search-results" />
             {searchOpen&&query.trim().length>=2&&<div className="search-results" id="global-search-results" role="listbox" onMouseDown={event=>event.preventDefault()}>{searchBusy?<div className="search-message">Searching…</div>:searchError?<div className="search-message error">{searchError}</div>:searchGroups.length?searchGroups.map(group=><section key={group.key}><header>{group.label}<small>{group.items.length}</small></header>{group.items.map(result=><button key={`${result.kind}-${result.id}`} role="option" aria-selected="false" onClick={()=>openSearchResult(result)}><i>{group.label.slice(0,1)}</i><span><strong>{result.title}</strong><small>{result.subtitle}</small></span>{result.status&&<em>{result.status.replaceAll('_',' ')}</em>}</button>)}</section>):<div className="search-message">Nothing found for “{query.trim()}”.</div>}</div>}
           </div>
-          <div className="top-actions"><button aria-label="Notifications" title="Notifications" onClick={openNotifications}><Icon name="bell" />{notifications.unread>0&&<em>{notifications.unread}</em>}</button><button className="quick" onClick={() => setShowQuick(!showQuick)}>＋ New</button></div>
+          <div className="top-actions"><button aria-label="Notifications" title="Notifications" onClick={toggleNotices}><Icon name="bell" />{notifications.unread>0&&<em>{notifications.unread}</em>}</button><button className="quick" onClick={() => setShowQuick(!showQuick)}>＋ New</button></div>
+          {showNotices && <div className="notice-menu" role="dialog" aria-label="Notifications">
+            <div className="notice-head"><strong>Notifications</strong>{notifications.unread>0&&<button type="button" onClick={()=>markNoticesRead(notifications.items.filter(item=>!item.read_at).map(item=>item.id))}>Mark all as read</button>}</div>
+            {notifications.items.length===0&&<p className="notice-empty">Nothing new.</p>}
+            {notifications.items.slice(0,30).map(item=><button type="button" key={item.id} className={item.read_at?"notice-item":"notice-item unread"} onClick={()=>openNotice(item)}><b>{item.title||"Notification"}</b>{item.body&&<span>{item.body}</span>}{item.created_at&&<small>{new Date(item.created_at).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'})}</small>}</button>)}
+          </div>}
           {showQuick && <div className="quick-menu"><button onClick={() => { openPeople('all'); setShowQuick(false); }}>Add a staff member</button><button onClick={() => { setActive("Daily Attendance"); setShowQuick(false); }}>Mark attendance</button><button onClick={() => { setActive("Leave & Shifts"); setShowQuick(false); }}>Record leave</button><button onClick={() => { setActive("Payroll"); setShowQuick(false); }}>Start this month's salary</button><button onClick={() => { setActive("Recruitment"); setShowQuick(false); }}>Start hiring for a job</button></div>}
         </header>
         <div className="content">

@@ -69,7 +69,7 @@ export async function POST(request: Request) {
       const title = `New job application: ${app.position}`;
       const body = [app.fullName, app.phone, app.email, app.city].filter(Boolean).join(" · ");
       await tx`INSERT INTO notifications (recipient_user_id,business_head_id,title,body,action_path,deliver_on)
-               SELECT DISTINCT u.id,${head.id}::uuid,${title}::text,${body}::text,'/',current_date
+               SELECT DISTINCT u.id,${head.id}::uuid,${title}::text,${body}::text,'/?module=Recruitment',current_date
                FROM users u JOIN user_roles ur ON ur.user_id=u.id JOIN roles r ON r.id=ur.role_id
                WHERE u.active=true AND r.code IN ('SUPER_ADMIN','HR_ADMIN','RECRUITER') AND ur.department_id IS NULL AND (ur.business_head_id IS NULL OR ur.business_head_id=${head.id})`;
       await tx`INSERT INTO audit_events (action,entity_type,entity_id,business_head_id,after_data,reason) VALUES ('candidate.website_application','candidate',${candidate.id},${head.id},${tx.json({ applicationId: row.id, position: app.position })},'Application received from the careers form')`;
