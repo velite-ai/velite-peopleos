@@ -7,6 +7,7 @@ const PUBLIC_PATHS = [
   "/api/auth/login",
   "/api/setup",
   "/api/health",
+  "/api/public/careers",
   "/manifest.webmanifest",
   "/sw.js",
   "/favicon.svg",

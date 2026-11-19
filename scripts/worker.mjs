@@ -2,6 +2,7 @@ import postgres from "postgres";
 import { createDecipheriv, createHash, createHmac, randomUUID } from "node:crypto";
 import { hostname } from "node:os";
 import { checkDocument } from "../lib/document-checks.mjs";
+import { buildHubTask, hubConfig, sendToHub } from "../lib/hub-careers.mjs";
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error("DATABASE_URL is required for the worker");
@@ -466,6 +467,52 @@ async function deliverEmailNotifications() {
   if (!items.length) return { emailsClaimed: 0 };
   const results = await mapLimit(items, 10, (item) => processEmail(item, endpoint));
   return { emailsClaimed: items.length, ...summarize(results, "emails") };
+}
+
+// Careers-form applications whose Velite Hub task could not be created at once (the Hub was unreachable): try again with back-off.
+async function claimHubTasks() {
+  return sql.begin(async (transaction) => transaction`
+    WITH due AS (
+      SELECT a.id FROM career_applications a
+      WHERE a.hub_attempts<${maxAttempts}
+        AND ((a.hub_status IN ('pending','retrying') AND a.hub_next_attempt_at<=now())
+          OR (a.hub_status='sending' AND a.hub_leased_until<now()))
+      ORDER BY a.created_at
+      FOR UPDATE SKIP LOCKED
+      LIMIT 20
+    )
+    UPDATE career_applications a
+    SET hub_status='sending',hub_attempts=a.hub_attempts+1,hub_lease_owner=${workerId},hub_leased_until=${leaseUntil()}
+    FROM due,business_heads b
+    WHERE a.id=due.id AND b.id=a.business_head_id
+    RETURNING a.id,a.full_name,a.email,a.phone,a.position,a.city,a.message,a.hub_attempts,b.name AS company
+  `);
+}
+
+async function processHubTask(item, config) {
+  try {
+    const taskId = await sendToHub(buildHubTask(item, item.company, process.env.APP_URL), config, requestTimeoutMs);
+    const [updated] = await sql`
+      UPDATE career_applications SET hub_status='sent',hub_task_id=${taskId},hub_sent_at=now(),hub_lease_owner=NULL,hub_leased_until=NULL,hub_error=NULL
+      WHERE id=${item.id} AND hub_status='sending' AND hub_lease_owner=${workerId} RETURNING id`;
+    return updated ? "delivered" : "leaseLost";
+  } catch (error) {
+    const terminal = Number(item.hub_attempts) >= maxAttempts;
+    const [updated] = await sql`
+      UPDATE career_applications SET hub_status=${terminal ? "failed" : "retrying"},hub_lease_owner=NULL,hub_leased_until=NULL,
+        hub_error=${errorMessage(error).slice(0, 200)},hub_next_attempt_at=${retryAt(Number(item.hub_attempts))}
+      WHERE id=${item.id} AND hub_status='sending' AND hub_lease_owner=${workerId} RETURNING id`;
+    return updated ? "failed" : "leaseLost";
+  }
+}
+
+async function deliverHubTasks() {
+  const config = hubConfig();
+  if (!config) return { hubTasksSkipped: "not_configured" };
+  const items = await claimHubTasks();
+  if (!items.length) return { hubTasksClaimed: 0 };
+  const results = await mapLimit(items, 3, (item) => processHubTask(item, config));
+  return { hubTasksClaimed: items.length, ...summarize(results, "hubTasks") };
 }
 
 async function claimScans() {
@@ -947,6 +994,7 @@ async function cycle() {
   await runStage("scans", scanDocuments, result, errors);
   await runStage("webhooks", deliverWebhooks, result, errors);
   await runStage("emails", deliverEmailNotifications, result, errors);
+  await runStage("hubTasks", deliverHubTasks, result, errors);
   result.durationMs = Date.now() - started;
   await markCycleFinished(result, errors);
   log(errors.length ? "error" : "info", errors.length ? "worker.cycle_degraded" : "worker.cycle", {
