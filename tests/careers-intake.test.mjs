@@ -75,3 +75,19 @@ test("the careers address is public, saves the candidate and notifies HR, and th
   assert.match(route, /originAllowed/);
   assert.match(await readFile("scripts/worker.mjs", "utf8"), /deliverHubTasks/);
 });
+
+test("the Hub call sends a classic anon key as bearer too, but a publishable key only as apikey", async () => {
+  const { sendToHub } = await import("../lib/hub-careers.mjs");
+  const seen = [];
+  const original = globalThis.fetch;
+  globalThis.fetch = async (url, init) => { seen.push({ url, headers: init.headers }); return new Response(JSON.stringify("11111111-2222-3333-4444-555555555555"), { status: 200 }); };
+  try {
+    const task = { title: "t", description: "d", firm: "VH" };
+    await sendToHub(task, { url: "https://x.supabase.co", key: "eyJhbGciOi.payload.sig", secret: "s" });
+    await sendToHub(task, { url: "https://x.supabase.co", key: "sb_publishable_abc", secret: "s" });
+  } finally { globalThis.fetch = original; }
+  assert.equal(seen[0].headers.authorization, "Bearer eyJhbGciOi.payload.sig");
+  assert.equal(seen[1].headers.apikey, "sb_publishable_abc");
+  assert.equal(seen[1].headers.authorization, undefined);
+  assert.match(seen[1].url, /\/rest\/v1\/rpc\/hub_careers_task$/);
+});
