@@ -785,3 +785,45 @@ docker exec -i -e TARGET_COMPANY="Velite Healthcare" -e KEEP_CODE=VEL-110 -e DRO
 ## 44. Extra unpaid days in Salary inputs — Nov 2026
 
 Salary inputs has a new column **Extra unpaid days** (`payroll_inputs.extra_unpaid_days`, migration 031; whole or half days). It takes days off a person's pay **on top of the attendance**, for when the accountant's sheet pays fewer days than the attendance marks (found comparing Healthcare October 2026: Aishwerya 3, Ambika 1, Rajeev 1, Lovepreet 1, Meenakshi 1, Tisha 4, Surbhi 5). Applied in `applySalaryInputs` (`lib/payroll-input-rules.ts`, unit tested) and, for Velite-table companies, after the paid-days table in `app/api/payroll/run/route.ts`. Paid leave is applied first; the extra days can never exceed the days still paid. The trace keeps `extraUnpaidDays` / `extraUnpaidApplied`; changes are audited as `payroll.inputs`. Attendance itself is not changed, so use it only when the sheet's days are the ones to pay.
+
+---
+
+## 45. Careers form on www.velite.in → Hiring, a bell notification and a Velite Hub task — Nov 2026
+
+`POST https://hr.velite.in/api/public/careers` (`app/api/public/careers/route.ts`; public in `proxy.ts`). Rules in `lib/careers-rules.ts` (unit tested, `tests/careers-intake.test.mjs`); Hub call in `lib/hub-careers.mjs` (plain JS, shared with `scripts/worker.mjs`).
+- **Accepts** JSON or a normal form post: `fullName` (or `name`), `email` and/or `phone`, `position`, optional `city` and `message`, `consent` (must be true / "on"). Optional `_redirect` (a page on an allowed site) makes a plain form post answer 303 to it instead of JSON.
+- **Protection:** only the websites in `CAREERS_ALLOWED_ORIGINS` (default `https://www.velite.in,https://velite.in`) may post (CORS + origin check); a server-side form can send header `x-careers-key` = `CAREERS_FORM_KEY` instead. Hidden trap field `website` (or `company_url`) filled, or more than 3 links in the message → thanked and dropped. 5 applications per visitor (IP hash) per hour and 60 per 10 minutes overall → 429. Body ≤ 30 KB. Everything typed is stored as text and shown escaped.
+- **What it creates (one transaction):** a row in `career_applications` (migration 032: everything typed, consent time, origin, IP hash), a candidate in Hiring (stage *applied*, source *Website*, company = `CAREERS_DEFAULT_COMPANY`, default **Velite Healthcare**; HR can change nothing but the stage today), a stage entry carrying city and message (`candidate_stage_events.changed_by` is now nullable), a bell notification (and the normal email if configured) for every active login with role SUPER_ADMIN, HR_ADMIN or RECRUITER that covers the company (all companies, or that one), and an audit entry `candidate.website_application`.
+- **Hub task:** after the save, the server calls the Supabase function `hub_careers_task` of the Hub project (`velite-hub`, `supabase/careers_task.sql`) with `HUB_SUPABASE_URL`, `HUB_SUPABASE_ANON_KEY` (the public key) and `HUB_CAREERS_SECRET` (only its SHA-256 is stored in the Hub). The function creates a Medium-priority To-Do due in 3 days for the person set in the Hub (`careers_assignee_id`) and writes the Hub bell + email-queue row itself, because the Hub's own triggers skip notifications when nobody is signed in. If any of the three settings is missing the Hub step is skipped (`hub_status='off'`); if the Hub cannot be reached the application is still saved, `hub_status='retrying'`, and the worker retries with back-off (`deliverHubTasks`, up to `WORKER_MAX_ATTEMPTS`, then `failed`; the error is in `career_applications.hub_error`).
+- **Text sent to the Hub has `<` and `>` removed:** the Hub builds its HTML emails from the task title and details without escaping them.
+- Set `HUB_*` (and any `CAREERS_*`) on **both** the `web` and `worker` services in the Coolify compose file. Never put the secret in the repo or in chat. Firm code sent to the Hub follows the company: Pharmaceuticals VP, Healthcare VH, India VI, Sciences VS, others none.
+- Not built: resume upload (the form takes a message only), a screen for the application's city / message beyond the stage history, and the website side (a small piece of JavaScript or a form posting to the address above).
+
+Minimal form code for the website:
+```html
+<form id="careers-form">
+  <input name="fullName" placeholder="Your name" required>
+  <input name="email" type="email" placeholder="Email">
+  <input name="phone" placeholder="Phone">
+  <input name="position" placeholder="Position you are applying for" required>
+  <input name="city" placeholder="City">
+  <textarea name="message" placeholder="About you"></textarea>
+  <input name="website" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px" aria-hidden="true">
+  <label><input type="checkbox" name="consent"> I agree that Velite may keep my details for hiring.</label>
+  <button>Apply</button><p id="careers-msg"></p>
+</form>
+<script>
+document.getElementById('careers-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const form = event.target, data = Object.fromEntries(new FormData(form));
+  data.consent = form.consent.checked;
+  const msg = document.getElementById('careers-msg');
+  try {
+    const response = await fetch('https://hr.velite.in/api/public/careers', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(data) });
+    const body = await response.json().catch(() => ({}));
+    if (response.ok) { form.reset(); msg.textContent = 'Thank you. We have received your application.'; }
+    else msg.textContent = (body.error && body.error.message) || 'Sorry, please try again later.';
+  } catch (e) { msg.textContent = 'Sorry, please try again later.'; }
+});
+</script>
+```
