@@ -29,6 +29,46 @@ async function responseData(response: Response) {
   return body?.data;
 }
 
+const dateTime = (value: unknown) => { const date = value ? new Date(String(value)) : null; return date && !Number.isNaN(date.getTime()) ? date.toLocaleString("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"; };
+
+/** Details of one candidate: contact, the website application behind them (message, resume link) and the stage history. */
+function CandidateDetails({ row, onClose, onMove }: { row: any; onClose: () => void; onMove: () => void }) {
+  const [data, setData] = useState<any>(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let live = true;
+    fetch(`/api/recruitment/candidates/${row.id}`, { cache: "no-store" }).then(responseData).then(value => { if (live) setData(value); }).catch(err => { if (live) setError((err as Error).message); });
+    return () => { live = false; };
+  }, [row.id]);
+  const candidate = data?.candidate || row;
+  const application = data?.application;
+  const resume = typeof application?.resume_url === "string" && /^https:\/\//i.test(application.resume_url) ? application.resume_url : null;
+  return <div className="modal-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}><section className="modal" role="dialog" aria-modal="true" aria-labelledby="candidate-details-title">
+    <div className="modal-head"><div><span className="eyebrow">CANDIDATE</span><h2 id="candidate-details-title">{candidate.full_name}</h2></div><button onClick={onClose} aria-label="Close">×</button></div>
+    <div className="form-grid">
+      <div><b>Applying for</b><div>{candidate.position || "—"}</div></div>
+      <div><b>Company</b><div>{candidate.business_head || row.business_head || "—"}</div></div>
+      <div><b>Stage</b><div>{friendly(candidate.stage)}</div></div>
+      <div><b>Source</b><div>{candidate.source || "—"}</div></div>
+      <div><b>Phone</b><div>{candidate.phone || "—"}</div></div>
+      <div><b>Email</b><div>{candidate.email || "—"}</div></div>
+      <div><b>Added</b><div>{dateTime(candidate.created_at)}</div></div>
+      <div><b>Consent to keep details</b><div>{candidate.consented_at ? dateTime(candidate.consented_at) : "Not recorded"}</div></div>
+    </div>
+    {error && <div className="form-error">{error}</div>}
+    {!data && !error && <p>Loading details…</p>}
+    {application && <div className="panel" style={{ marginTop: 12, padding: 12 }}>
+      <b>Website application</b>
+      <div>Applied on {dateTime(application.created_at)}{application.source_origin ? ` · from ${application.source_origin}` : ""}</div>
+      {application.city && <div>City: {application.city}</div>}
+      {application.message && <div style={{ whiteSpace: "pre-wrap" }}>Message: {application.message}</div>}
+      <div style={{ marginTop: 8 }}>{resume ? <><a className="primary" href={resume} target="_blank" rel="noopener noreferrer">Open resume</a> <small>Link from the website form. Open it only if you trust it.</small></> : <small>No resume link was received.</small>}</div>
+    </div>}
+    {data && <div style={{ marginTop: 12 }}><b>History</b>{data.history.length === 0 ? <div>No history yet.</div> : data.history.map((item: any, index: number) => <div key={index} style={{ padding: "4px 0", whiteSpace: "pre-wrap" }}>{dateTime(item.changed_at)} · {item.from_stage ? `${friendly(item.from_stage)} → ` : ""}{friendly(item.to_stage)}{item.changed_by_name ? ` · ${item.changed_by_name}` : " · Website form"}{item.notes ? <div><small>{item.notes}</small></div> : null}</div>)}</div>}
+    <div className="modal-actions"><button type="button" className="secondary" onClick={onClose}>Close</button><button type="button" className="primary" onClick={onMove}>Move to another stage…</button></div>
+  </section></div>;
+}
+
 export function OperationsWorkspace({ active, businessHeadId, head, heads, people, flash }: {
   active: OperationsModule;
   businessHeadId: string;
@@ -44,6 +84,7 @@ export function OperationsWorkspace({ active, businessHeadId, head, heads, peopl
   const [report, setReport] = useState<any>(null);
   const [busy, setBusy] = useState(true);
   const [modal, setModal] = useState<ModalKind | null>(null);
+  const [candidateView, setCandidateView] = useState<any>(null);
   const [refresh, setRefresh] = useState(0);
 
   const scoped = useCallback((path: string) => {
@@ -224,11 +265,12 @@ export function OperationsWorkspace({ active, businessHeadId, head, heads, peopl
       {!busy && primaryRows.map((row, index) => <button key={row.id || index} onClick={() => click(row)}><i>{index + 1}</i><div><b>{title(row)}</b><span>{detail(row)}</span></div><em className={`status ${statusClass(row.status || (Number(row.probation) ? "attention" : "active"))}`}>{friendly(row.status || (Number(row.probation) ? "attention" : "active"))}</em><strong>›</strong></button>)}
       {busy && <div className="empty-state padded">Loading…</div>}{!busy && !primaryRows.length && <div className="empty-state padded">No records in this view.</div>}
     </section>
-    {active === "Recruitment" && <section className="panel worklist operations-list"><div className="panel-head padded"><div><h2>Candidate pipeline</h2><p>Click a candidate to move them through a controlled stage</p></div></div>{secondary.slice(0, 20).map((row, index) => <button key={row.id} onClick={() => candidateAction(row)}><i>{index + 1}</i><div><b>{row.full_name}</b><span>{row.position} · {row.business_head} · {row.email || row.phone || "Contact pending"}</span></div><em className={`status ${statusClass(row.stage)}`}>{friendly(row.stage)}</em><strong>›</strong></button>)}</section>}
+    {active === "Recruitment" && <section className="panel worklist operations-list"><div className="panel-head padded"><div><h2>Candidate pipeline</h2><p>Click a candidate to see their details and move them to another stage</p></div></div>{secondary.slice(0, 20).map((row, index) => <button key={row.id} onClick={() => setCandidateView(row)}><i>{index + 1}</i><div><b>{row.full_name}</b><span>{row.position} · {row.business_head} · {row.email || row.phone || "Contact pending"}</span></div><em className={`status ${statusClass(row.stage)}`}>{friendly(row.stage)}</em><strong>›</strong></button>)}</section>}
     {active === "Recruitment" && <section className="panel worklist operations-list"><div className="panel-head padded"><div><h2>Offer letters</h2><p>Print an offer letter again, or make a new one with the button above</p></div></div>{tertiary.slice(0, 20).map((row, index) => <div className="offer-row" key={row.id}><i>{index + 1}</i><div><b>{row.candidate_name} · {row.offered_position}</b><span>Joining {dateOnly(row.proposed_joining_date)}{row.terms?.monthlySalary ? ` · Rs. ${row.terms.monthlySalary} per month` : ""} · {friendly(row.status)}</span></div><button type="button" className="secondary" onClick={() => window.open(`/letters/print?type=offer&offer=${encodeURIComponent(row.id)}`, "_blank")}>Preview &amp; print</button></div>)}{!tertiary.length && <div className="empty-state padded">No offer letter has been made yet.</div>}</section>}
     {active === "Leave & Shifts" && <div className="grid halves"><section className="panel worklist operations-list"><div className="panel-head padded"><div><h2>Leave policy versions</h2><p>Click a draft or pending version to advance maker-checker approval</p></div></div>{secondary.slice(0, 20).map((row, index) => <button key={row.id} onClick={() => policyAction(row)}><i>{index + 1}</i><div><b>{row.code} · {row.name}</b><span>{row.annual_entitlement} days · {friendly(row.accrual_frequency)} · effective {dateOnly(row.effective_from)}</span></div><em className={`status ${statusClass(row.status)}`}>{friendly(row.status)}</em><strong>›</strong></button>)}</section><section className="panel worklist operations-list"><div className="panel-head padded"><div><h2>Active shifts</h2><p>Work-time, grace and payroll thresholds</p></div></div>{tertiary.slice(0, 20).map((row, index) => <button key={row.id} onClick={() => flash(`${row.name} shift opened.`)}><i>{index + 1}</i><div><b>{row.code} · {row.name}</b><span>{String(row.start_time).slice(0, 5)}–{String(row.end_time).slice(0, 5)} · {row.full_day_minutes} full-day minutes</span></div><em className="status active">Active</em><strong>›</strong></button>)}</section></div>}
     {active === "Learning" && <section className="panel worklist operations-list"><div className="panel-head padded"><div><h2>Assignments</h2><p>Completion and certification due dates</p></div></div>{secondary.slice(0, 20).map((row, index) => <button key={row.id} onClick={() => flash(`${row.employee_name}'s ${row.title} assignment opened.`)}><i>{index + 1}</i><div><b>{row.employee_name} · {row.title}</b><span>{row.progress}% complete · due {dateOnly(row.due_date)}</span></div><em className={`status ${statusClass(row.status)}`}>{friendly(row.status)}</em><strong>›</strong></button>)}</section>}
     {active === "Separation" && <section className="panel worklist operations-list"><div className="panel-head padded"><div><h2>Final settlement control</h2><p>Versioned calculation, maker-checker approval, payment evidence and private statement</p></div></div>{secondary.slice(0, 20).map((row, index) => <button key={row.id} onClick={() => settlementAction(row)}><i>{index + 1}</i><div><b>{row.employee_name} · {new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(Number(row.net_payable))}</b><span>Gross {Number(row.gross_payable).toLocaleString("en-IN")} · recoveries {Number(row.recoveries).toLocaleString("en-IN")} · rule {row.rule_code || "—"} v{row.rule_version || "—"}{row.generation_status ? ` · statement ${friendly(row.generation_status).toLowerCase()}` : ""}</span></div><em className={`status ${statusClass(row.document_id ? "issued" : row.status)}`}>{row.document_id ? "Download" : friendly(row.status)}</em><strong>›</strong></button>)}{!secondary.length && <div className="empty-state padded">No final settlement has been calculated.</div>}</section>}
+    {candidateView && <CandidateDetails row={candidateView} onClose={() => setCandidateView(null)} onMove={() => { const row = candidateView; setCandidateView(null); void candidateAction(row); }} />}
     {modal && <OperationsForm kind={modal} activeHead={businessHeadId} heads={heads} people={people} records={records} secondary={secondary} tertiary={tertiary} onClose={() => setModal(null)} onSaved={() => { setModal(null); setRefresh(value => value + 1); flash("Saved successfully with an audit entry."); }} />}
   </>;
 }
