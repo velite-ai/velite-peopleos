@@ -15,6 +15,7 @@ export const MOVES_WITH_PERSON: Record<string, string> = {
   tax_declarations: "tax declarations",
   raw_punches: "machine punches",
   generated_letters: "letters",
+  staff_items: "company items (stock counts follow the person)",
 };
 
 const FRIENDLY_BLOCKERS: Record<string, string> = {

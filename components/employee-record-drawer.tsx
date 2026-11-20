@@ -3,6 +3,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, react-hooks/set-state-in-effect */
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { StaffItemsPanel } from "@/components/staff-items";
+import { describeItems } from "@/lib/staff-item-rules";
 import { EmployeePhoto } from "@/components/employee-photo";
 import { LETTER_GROUPS, LETTER_LABELS } from "@/lib/letter-rules";
 import { countLabel } from "@/lib/company-correction-rules";
@@ -16,7 +18,7 @@ type DirectoryPerson = {
 };
 
 const DOCUMENT_CATEGORIES: [string, string][] = [["identity", "Identity proof"], ["address_proof", "Address proof"], ["education", "Education certificate"], ["experience", "Previous employment"], ["contract", "Contract or offer letter"], ["bank", "Bank details"], ["tax", "Tax"], ["health", "Health"], ["background_check", "Background check"], ["other", "Other"]];
-type Tab = "employment" | "personal" | "pay" | "growth" | "letters" | "documents" | "timeline";
+type Tab = "employment" | "personal" | "pay" | "growth" | "letters" | "documents" | "items" | "timeline";
 type FormKind = "employment" | "lifecycle" | "resignation" | "personal" | "emergency" | "sensitive" | "compensation" | "skill" | "plan" | "letter" | "delete";
 
 const friendly = (value: unknown) => String(value || "—").replaceAll("_", " ").replace(/\b\w/g, letter => letter.toUpperCase());
@@ -195,7 +197,7 @@ export function EmployeeRecordDrawer({ person, people, heads = [], canChangeComp
         <div className="record-summary"><div><span>Record complete</span><strong>{completion}%</strong></div><i><b style={{ width: `${completion}%` }} /></i><em className={`status ${String(employee?.status || "active").replaceAll("_", "-")}`}>{friendly(employee?.status || "active")}</em></div>
       </header>
       <nav className="record-tabs" aria-label="Employee record sections">
-        {(["employment", "personal", "pay", "growth", "letters", "documents", "timeline"] as Tab[]).map(item => <button key={item} className={tab === item ? "active" : ""} onClick={() => setTab(item)}>{item === "pay" ? "Pay, PF & bank" : item === "growth" ? "Growth & skills" : item === "timeline" ? "History" : friendly(item)}</button>)}
+        {(["employment", "personal", "pay", "growth", "letters", "documents", "items", "timeline"] as Tab[]).map(item => <button key={item} className={tab === item ? "active" : ""} onClick={() => setTab(item)}>{item === "pay" ? "Pay, PF & bank" : item === "growth" ? "Growth & skills" : item === "timeline" ? "History" : item === "items" ? "Company items" : friendly(item)}</button>)}
       </nav>
       <div className="record-body">
         {busy ? <div className="record-loading">Loading the secured employee record…</div> : !employee ? <div className="record-loading">This record is not available in your authorised scope.</div> : <>
@@ -206,7 +208,7 @@ export function EmployeeRecordDrawer({ person, people, heads = [], canChangeComp
             <RecordCard title="Lifecycle dates" subtitle="Drives reminders in the HR calendar" action="Edit dates" onAction={() => setForm("lifecycle")}><DefinitionGrid values={[
               ["Date joined", dateOnly(employee.date_joined)], ["Probation end", dateOnly(employee.probation_end_date)], ["Confirmation", dateOnly(employee.confirmation_date)], ["Next salary revision", dateOnly(employee.next_salary_revision_date)], ["Notice started", dateOnly(employee.notice_start_date)], ["Last working day", dateOnly(employee.last_working_date)],
             ]} />
-              {separation ? <ExitCard separation={separation} employeeName={employee.first_name} flash={flash} />                 : ["probation", "active"].includes(employee.status) ? <div className="exit-note"><span>Resignation received? Record it here to start the notice period and the exit steps.</span><button type="button" onClick={() => setForm("resignation")}>Record resignation</button></div> : null}
+              {separation ? <ExitCard separation={separation} employeeName={employee.first_name} itemsToReturn={record.itemsToReturn || []} flash={flash} />                 : ["probation", "active"].includes(employee.status) ? <div className="exit-note"><span>Resignation received? Record it here to start the notice period and the exit steps.</span><button type="button" onClick={() => setForm("resignation")}>Record resignation</button></div> : null}
             </RecordCard>
             <RecordCard wide title="People who report to this person" subtitle={record?.directReports?.length ? `${record.directReports.length} ${record.directReports.length === 1 ? "person reports" : "people report"} directly to ${employee.first_name}. Reporting lines can cross companies.` : "Direct reports, from any company"}>{record?.directReports?.length ? <div className="direct-reports">{record.directReports.map((item: any) => <div key={item.id}><b>{item.name}</b><span>{[item.employee_code, item.position, item.business_head !== employee.business_head ? item.business_head : null].filter(Boolean).join(" · ")}</span></div>)}</div> : <Unavailable text="No one reports to this person yet. Set it in the other person's record: Edit employment → Reporting manager." />}</RecordCard>
             <RecordCard title="Work contact"><DefinitionGrid values={[["Work email", employee.work_email], ["Work phone", employee.phone], ["Record created", dateOnly(employee.created_at)], ["Last updated", dateOnly(employee.updated_at)]]} /></RecordCard>
@@ -255,6 +257,7 @@ export function EmployeeRecordDrawer({ person, people, heads = [], canChangeComp
               {documents.length ? <div className="record-list">{documents.map((doc: any) => <button key={doc.id} onClick={() => openDocument(doc)}><span>▤</span><div><strong>{doc.file_name}</strong><small>{friendly(doc.category)} · {(Number(doc.size_bytes) / 1024 / 1024).toFixed(1)} MB · added {String(doc.created_at).slice(0, 10)}{doc.expires_on ? ` · expires ${String(doc.expires_on).slice(0, 10)}` : ""}</small></div><em title={doc.scan_status === "infected" ? `Blocked: ${(doc.scan_details?.reasons || []).join(" ") || "the file check found a problem."} Upload a clean copy instead.` : doc.scan_status === "clean" ? "Passed the file safety check" : "Waiting for the file safety check, which runs every few minutes"} className={`status ${doc.scan_status === "clean" ? "approved" : doc.scan_status === "infected" ? "rejected" : "pending"}`}>{doc.scan_status === "clean" ? "Checked" : doc.scan_status === "infected" ? "Blocked" : "Awaiting check"}</em></button>)}</div> : <div className="record-empty">No documents yet.</div>}
             </> : <div className="record-empty">You do not have access to this employee's documents.</div>}
           </RecordCard>}
+          {tab === "items" && <StaffItemsPanel employeeId={person.id} employeeName={employee.first_name} flash={flash} />}
           {tab === "timeline" && <RecordCard title="Employment timeline" subtitle="Dated employee events cannot be silently overwritten"><div className="timeline-list">{(record.events || []).map((event: any) => <div key={event.id}><i /><span>{dateOnly(event.effective_date)}</span><div><strong>{friendly(event.event_type)}</strong><p>{event.reason}</p><small>Recorded by {event.created_by_name} · {new Date(event.created_at).toLocaleString("en-IN")}</small></div></div>)}{!record.events?.length && <Unavailable text="No employee events have been recorded yet." />}</div></RecordCard>}
         </>}
       </div>
@@ -308,7 +311,7 @@ function ChangeCompanyModal({ employeeId, name, current, currentId, heads, onClo
 }
 
 // The exit in progress: tick off the exit steps, then finish the exit, which moves the person to "Left the company".
-function ExitCard({ separation, employeeName, flash }: { separation: any; employeeName: string; flash: (message: string) => void }) {
+function ExitCard({ separation, employeeName, itemsToReturn = [], flash }: { separation: any; employeeName: string; itemsToReturn?: any[]; flash: (message: string) => void }) {
   const [busy, setBusy] = useState(false); const [error, setError] = useState("");
   // The steps are kept here so a tick shows at once, without reloading the whole record.
   const [tasks, setTasks] = useState<any[]>(separation.tasks || []);
@@ -343,6 +346,7 @@ function ExitCard({ separation, employeeName, flash }: { separation: any; employ
       <div className="exit-progress">{done} of {tasks.length} exit steps done</div>
       <div className="exit-task-list">{tasks.map(task => <label key={task.id} className={task.status === "completed" ? "exit-done" : ""}><input type="checkbox" checked={task.status === "completed"} disabled={busy} onChange={() => tick(task)} /> {task.title}</label>)}</div>
     </>}
+    {itemsToReturn.length > 0 && <div className="exit-items-warning"><b>Company items not yet returned: {itemsToReturn.length}</b><span>{describeItems(itemsToReturn)}. Mark them returned on the Company items tab. You can still finish the exit.</span></div>}
     {error && <div className="form-error">{error}</div>}
     <button type="button" className="exit-finish" disabled={busy || !ready} onClick={finish}>Finish exit</button>
     {!ready && <span className="exit-hint">{lastDay > today ? `Available on ${dateOnly(lastDay)}, the last working day.` : "Tick every exit step to finish the exit."}</span>}

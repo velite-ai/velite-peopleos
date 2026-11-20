@@ -14,9 +14,10 @@ import { AdministrationWorkspace } from "@/components/administration-workspace";
 import { EngagementWorkspace } from "@/components/engagement-workspace";
 import { DiwaliGiftsWorkspace } from "@/components/diwali-gifts-workspace";
 import { DataCleanupWorkspace } from "@/components/data-cleanup-workspace";
+import { CompanyItemsWorkspace } from "@/components/staff-items";
 import { GRACE_MINUTES, WORK_END_MINUTES, WORK_START_MINUTES, earlyMinutes, formatClock, isTimeStatus, istMinutes, lateMinutes, parseClock } from "@/lib/attendance-time-rules";
 
-type Module = "Overview" | "My Workspace" | "People" | "Recruitment" | "Onboarding" | "Daily Attendance" | "Leave & Shifts" | "Payroll" | "Performance" | "Engagement" | "HR Calendar" | "Learning" | "Helpdesk" | "Separation" | "Reports" | "Administration" | "Diwali Gifts" | "Data Check";
+type Module = "Overview" | "My Workspace" | "People" | "Recruitment" | "Onboarding" | "Daily Attendance" | "Leave & Shifts" | "Payroll" | "Performance" | "Engagement" | "HR Calendar" | "Learning" | "Helpdesk" | "Separation" | "Reports" | "Administration" | "Diwali Gifts" | "Data Check" | "Company Items";
 
 type BusinessHead = { id: string; code: string; name: string };
 
@@ -27,28 +28,29 @@ const LABEL: Record<Module, string> = {
   "Onboarding": "Joining", "Daily Attendance": "Attendance", "Leave & Shifts": "Leave & shifts",
   "Payroll": "Salary", "Performance": "Appraisals", "Engagement": "Surveys & recognition",
   "HR Calendar": "Calendar", "Learning": "Training", "Helpdesk": "Help desk", "Separation": "Leaving",
-  "Reports": "Reports", "Administration": "Settings", "Diwali Gifts": "Diwali gifts", "Data Check": "Data check",
+  "Reports": "Reports", "Administration": "Settings", "Diwali Gifts": "Diwali gifts", "Data Check": "Data check", "Company Items": "Company items",
 };
 const ICON: Record<Module, IconName> = {
   "Overview": "home", "My Workspace": "user", "People": "users", "Recruitment": "userPlus",
   "Onboarding": "doorIn", "Daily Attendance": "check", "Leave & Shifts": "sun",
   "Payroll": "rupee", "Performance": "star", "Engagement": "heart", "HR Calendar": "calendar",
-  "Learning": "book", "Helpdesk": "help", "Separation": "doorOut", "Reports": "chart", "Administration": "settings", "Diwali Gifts": "gift", "Data Check": "alert",
+  "Learning": "book", "Helpdesk": "help", "Separation": "doorOut", "Reports": "chart", "Administration": "settings", "Diwali Gifts": "gift", "Data Check": "alert", "Company Items": "box",
 };
 /* Everyday work is always visible; the rest sits under "More". */
 /* Each area of the app has its own colour (see the colour layer in globals.css). */
 const areaSlug=(item:string)=>item.toLowerCase().replace(/[^a-z]+/g,"-").replace(/^-|-$/g,"");
 const nav: { group: string; more?: boolean; items: Module[] }[] = [
   { group: "", items: ["Overview", "People", "Daily Attendance", "Leave & Shifts", "Payroll", "Reports"] },
-  { group: "Joining & leaving", more: true, items: ["Recruitment", "Onboarding", "Separation"] },
+  { group: "Joining & leaving", more: true, items: ["Recruitment", "Onboarding", "Company Items", "Separation"] },
   { group: "Growth & support", more: true, items: ["Performance", "Learning", "Engagement", "HR Calendar", "Helpdesk"] },
   { group: "Your account", more: true, items: ["My Workspace", "Data Check", "Administration", "Diwali Gifts"] },
 ];
 
-type IconName = "home"|"user"|"users"|"userPlus"|"doorIn"|"doorOut"|"check"|"sun"|"rupee"|"star"|"heart"|"calendar"|"book"|"help"|"chart"|"settings"|"shield"|"logout"|"chevron"|"search"|"bell"|"plus"|"alert"|"gift";
+type IconName = "home"|"user"|"users"|"userPlus"|"doorIn"|"doorOut"|"check"|"sun"|"rupee"|"star"|"heart"|"calendar"|"book"|"help"|"chart"|"settings"|"shield"|"logout"|"chevron"|"search"|"bell"|"plus"|"alert"|"gift"|"box";
 const ICON_PATHS: Record<IconName, string> = {
   home: "M3 10.5 12 3l9 7.5M5 9v11h5v-6h4v6h5V9",
   gift: "M20 12v9H4v-9M2 7h20v5H2zM12 22V7M12 7H7.5a2.5 2.5 0 1 1 0-5C11 2 12 7 12 7Zm0 0h4.5a2.5 2.5 0 1 0 0-5C13 2 12 7 12 7Z",
+  box: "M21 8 12 3 3 8v8l9 5 9-5V8ZM3 8l9 5 9-5M12 13v8",
   user: "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 9a7 7 0 0 1 14 0",
   users: "M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-6 10a6 6 0 0 1 12 0M16 3.5a4 4 0 0 1 0 7.5M18 15a6 6 0 0 1 3 5",
   userPlus: "M10 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 10a7 7 0 0 1 12.5-4.3M19 14v6M16 17h6",
@@ -116,7 +118,7 @@ export default function Home() {
   const [people, setPeople] = useState<Person[]>([]);
   const [attendance, setAttendance] = useState<AttendanceRow[]>([]);
   const [calendarEvents,setCalendarEvents]=useState<CalendarDisplay[]>([]);
-  const [sessionUser,setSessionUser]=useState<{fullName:string;mustChangePassword:boolean;mfaEnrollmentRequired:boolean;giftRegister?:boolean;roles:{code:string;businessHeadId:string|null;departmentId:string|null}[]} | null>(null);
+  const [sessionUser,setSessionUser]=useState<{fullName:string;mustChangePassword:boolean;mfaEnrollmentRequired:boolean;giftRegister?:boolean;assets?:{read:boolean;write:boolean};roles:{code:string;businessHeadId:string|null;departmentId:string|null}[]} | null>(null);
   type NoticeItem={id:string;title?:string;body?:string|null;action_path?:string|null;read_at?:string|null;created_at?:string};
   const [notifications,setNotifications]=useState<{unread:number;items:NoticeItem[]}>({unread:0,items:[]});
   const [showNotices,setShowNotices]=useState(false);
@@ -211,7 +213,7 @@ export default function Home() {
           const badge=(item:Module)=>item==='Helpdesk'?counts.openHelpdesk:item==='Leave & Shifts'?counts.pendingLeave:null;
           const button=(item:Module)=>{const count=badge(item);return <button data-mod={areaSlug(item)} className={active === item ? "active" : ""} onClick={() => {setActive(item);if(item==='People')setPeopleFilter('all');setShowMobileNav(false)}} key={item}><Icon name={ICON[item]} />{LABEL[item]}{count?<b title={`${count} waiting`}>{count}</b>:null}</button>};
           if(employeeOnly) return <div className="nav-group">{button('My Workspace')}</div>;
-  const visible=(section:typeof nav[number])=>section.items.filter(item=>(item!=='Administration'||canAdmin)&&(item!=='Data Check'||canAdmin)&&(item!=='Diwali Gifts'||isSuperAdmin));
+  const visible=(section:typeof nav[number])=>section.items.filter(item=>(item!=='Administration'||canAdmin)&&(item!=='Data Check'||canAdmin)&&(item!=='Diwali Gifts'||isSuperAdmin)&&(item!=='Company Items'||Boolean(sessionUser?.assets?.read)));
           const moreOpen=showMore||nav.some(section=>section.more&&section.items.includes(active));
           return <>{nav.filter(section=>!section.more).map(section=><div className="nav-group" key="main">{visible(section).map(button)}</div>)}
             <button className="nav-more" onClick={()=>setShowMore(value=>!value)} aria-expanded={moreOpen}><span style={{transform:moreOpen?'rotate(180deg)':'none',display:'inline-flex'}}><Icon name="chevron" size={16} /></span>{moreOpen?'Less':'More'}</button>
@@ -244,6 +246,7 @@ export default function Home() {
            active === "Engagement" ? <EngagementWorkspace businessHeadId={head} head={headName} heads={heads} people={people} flash={flash} /> :
            active === "HR Calendar" ? <HrCalendarWorkspace businessHeadId={head} head={headName} flash={flash} /> :
            active === "Diwali Gifts" ? (isSuperAdmin ? <DiwaliGiftsWorkspace flash={flash} /> : <section className="panel loading-panel">This page is not available.</section>) :
+           active === "Company Items" ? (sessionUser?.assets?.read ? <CompanyItemsWorkspace businessHeadId={head} head={headName} heads={heads} canWrite={Boolean(sessionUser?.assets?.write)} flash={flash} /> : <section className="panel loading-panel">This page is not available.</section>) :
            active === "Data Check" ? (canAdmin ? <DataCleanupWorkspace businessHeadId={head} head={headName} flash={flash} /> : <section className="panel loading-panel">This page is not available.</section>) :
            active === "Administration" ? <AdministrationWorkspace businessHeadId={head} head={headName} heads={heads} flash={flash} /> :
            <OperationsWorkspace active={active} businessHeadId={head} head={headName} heads={heads} people={people} flash={flash} />}

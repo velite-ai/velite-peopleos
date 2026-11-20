@@ -131,6 +131,13 @@ export function hasPermission(user: SessionUser, permission: string, businessHea
   return hasPermissionForScope(user, permission, businessHeadId);
 }
 
+/** True when the person holds a role that grants this permission for ANY company (used for menus and global lists such as item types). */
+export function hasPermissionAnywhere(user: SessionUser, permission: string) {
+  if (user.roles.some(role => role.code === "SUPER_ADMIN")) return true;
+  if (user.apiPermissions?.some(item => item === "*" || item === permission)) return true;
+  return user.roles.some(role => (PERMISSION_ROLES[permission] || []).includes(role.code));
+}
+
 export function hasUnscopedPermission(user: SessionUser, permission: string) {
   if (user.roles.some(role => role.code === "SUPER_ADMIN")) return true;
   if(user.apiPermissions?.some(item=>item==='*'||item===permission))return !user.apiBusinessHeadId;
