@@ -9,7 +9,7 @@ const good = { fullName: "Anita  Sharma", email: "Anita@Example.com", phone: "+9
 test("a good application is cleaned", () => {
   const r = parseApplication(good);
   assert.equal(r.ok, true);
-  assert.deepEqual(r.value, { fullName: "Anita Sharma", email: "anita@example.com", phone: "+919876543210", position: "QA Chemist", city: "Ludhiana", message: "I have 3 years of experience." });
+  assert.deepEqual(r.value, { fullName: "Anita Sharma", email: "anita@example.com", phone: "+919876543210", position: "QA Chemist", city: "Ludhiana", message: "I have 3 years of experience.", resumeUrl: null });
 });
 
 test("name, position, a way to reach the person and consent are required", () => {
@@ -109,4 +109,23 @@ test("the bell opens a list instead of jumping to the calendar", async () => {
   assert.match(page, /Mark all as read/);
   assert.doesNotMatch(page, /function openNotifications/);
   assert.match(await readFile("app/api/public/careers/route.ts", "utf8"), /\?module=Recruitment/);
+});
+
+test("the Wix form: first and last name, department as the position, a nested body and a resume link", () => {
+  const wix = { data: { firstName: "Anita", lastName: "Sharma", email: "a@b.co", phone: "9876543210", department: "Production", resumeUrl: "https://example.filesusr.com/ugd/resume.pdf", consent: true } };
+  const r = parseApplication(wix);
+  assert.equal(r.ok, true);
+  assert.equal(r.value.fullName, "Anita Sharma");
+  assert.equal(r.value.position, "Production");
+  assert.equal(r.value.resumeUrl, "https://example.filesusr.com/ugd/resume.pdf");
+  assert.equal(parseApplication({ ...wix.data, resumeUrl: "javascript:alert(1)" }).value.resumeUrl, null);
+  assert.equal(parseApplication({ ...wix.data, resumeUrl: "http://plain.example/x.pdf" }).value.resumeUrl, null);
+  assert.equal(parseApplication({ ...wix.data, resumeUrl: "https://a.example/x y" }).value.resumeUrl, null);
+});
+
+test("the form key can come as a header or as ?key= and a keyed form is not limited per visitor", async () => {
+  const route = await readFile("app/api/public/careers/route.ts", "utf8");
+  assert.match(route, /searchParams\.get\("key"\)/);
+  assert.match(route, /!viaKey && load\.mine >= 5/);
+  assert.match(await readFile("database/033_career_resume_url.sql", "utf8"), /resume_url/);
 });
