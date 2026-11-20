@@ -8,7 +8,7 @@ export function cleanLine(value: unknown, max: number): string { return String(v
 export function cleanBlock(value: unknown, max: number): string {
   return String(value ?? "").replace(CONTROL, " ").replace(/\r\n?/g, "\n").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim().slice(0, max);
 }
-const yes = (value: unknown) => value === true || ["true", "on", "yes", "1"].includes(String(value ?? "").trim().toLowerCase());
+const yes = (value: unknown) => value === true || ["true", "on", "yes", "y", "1", "checked", "agree", "agreed", "accepted"].includes(String(value ?? "").trim().toLowerCase());
 
 /** Cleans and checks the form. `spam` = silently drop (hidden trap field filled, or link-stuffed message). */
 export function parseApplication(input: Record<string, unknown>): Parsed {

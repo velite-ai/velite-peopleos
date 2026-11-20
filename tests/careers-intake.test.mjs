@@ -129,3 +129,8 @@ test("the form key can come as a header or as ?key= and a keyed form is not limi
   assert.match(route, /!viaKey && load\.mine >= 5/);
   assert.match(await readFile("database/033_career_resume_url.sql", "utf8"), /resume_url/);
 });
+
+test("a ticked consent box is accepted in the words different forms use; unticked words are not", () => {
+  for (const word of [true, "true", "on", "Yes", "checked", "Checked", "agree", "1"]) assert.equal(parseApplication({ ...good, consent: word }).ok, true, String(word));
+  for (const word of [false, "false", "off", "no", "", "unchecked", undefined]) assert.equal(parseApplication({ ...good, consent: word }).ok, false, String(word));
+});

@@ -50,7 +50,12 @@ export async function POST(request: Request) {
 
     const parsed = parseApplication(raw);
     if (!parsed.ok && parsed.spam) return done(); // looks like a bot: say thank you, keep nothing
-    if (!parsed.ok) return reply({ error: { message: parsed.message } }, 422, cors);
+    if (!parsed.ok) {
+      // Say why in the server log (field names and the consent word only, nothing personal) so a connection problem can be found.
+      const body = raw.data && typeof raw.data === "object" ? { ...raw, ...(raw.data as Record<string, unknown>) } : raw;
+      console.warn("careers: refused:", parsed.message, "| fields:", Object.keys(body).join(","), "| consent:", JSON.stringify(String(body.consent ?? "").slice(0, 20)), "| phone digits:", String(body.phone ?? "").replace(/\D/g, "").length);
+      return reply({ error: { message: parsed.message } }, 422, cors);
+    }
     const app = parsed.value;
 
     const sql = db();
