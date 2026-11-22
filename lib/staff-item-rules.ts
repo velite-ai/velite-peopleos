@@ -37,6 +37,17 @@ export function parseIssue(input: Record<string, unknown>, today: string): { ok:
   return { ok: true, value: { itemTypeId: input.itemTypeId as string, details: cleanLine(input.details, 300) || null, quantity, issuedOn: input.issuedOn as string, note: cleanLine(input.note, 500) || null } };
 }
 
+/** Give the same item to several people at once (all or nothing). */
+export function parseBulkGive(input: Record<string, unknown>, today: string): { ok: true; employeeIds: string[]; value: IssueInput } | Problem {
+  const ids = Array.isArray(input.employeeIds) ? [...new Set(input.employeeIds.map(item => String(item)))] : [];
+  if (!ids.length) return { ok: false, message: "Choose at least one person." };
+  if (ids.length > 200) return { ok: false, message: "Choose up to 200 people at a time." };
+  if (!ids.every(isUuid)) return { ok: false, message: "One of the people chosen is not valid. Reload the page and try again." };
+  const issue = parseIssue(input, today);
+  if (!issue.ok) return issue;
+  return { ok: true, employeeIds: ids, value: issue.value };
+}
+
 export type StatusChange = { action: ItemAction; on: string; note: string | null };
 export function parseStatusChange(input: Record<string, unknown>, current: ItemStatus, today: string, issuedOn?: string): { ok: true; value: StatusChange; to: ItemStatus } | Problem {
   const action = input.action as ItemAction;

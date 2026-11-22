@@ -246,7 +246,7 @@ export default function Home() {
            active === "Engagement" ? <EngagementWorkspace businessHeadId={head} head={headName} heads={heads} people={people} flash={flash} /> :
            active === "HR Calendar" ? <HrCalendarWorkspace businessHeadId={head} head={headName} flash={flash} /> :
            active === "Diwali Gifts" ? (isSuperAdmin ? <DiwaliGiftsWorkspace flash={flash} /> : <section className="panel loading-panel">This page is not available.</section>) :
-           active === "Company Items" ? (sessionUser?.assets?.read ? <CompanyItemsWorkspace businessHeadId={head} head={headName} heads={heads} canWrite={Boolean(sessionUser?.assets?.write)} flash={flash} /> : <section className="panel loading-panel">This page is not available.</section>) :
+           active === "Company Items" ? (sessionUser?.assets?.read ? <CompanyItemsWorkspace businessHeadId={head} head={headName} heads={heads} people={people} canWrite={Boolean(sessionUser?.assets?.write)} flash={flash} /> : <section className="panel loading-panel">This page is not available.</section>) :
            active === "Data Check" ? (canAdmin ? <DataCleanupWorkspace businessHeadId={head} head={headName} flash={flash} /> : <section className="panel loading-panel">This page is not available.</section>) :
            active === "Administration" ? <AdministrationWorkspace businessHeadId={head} head={headName} heads={heads} flash={flash} /> :
            <OperationsWorkspace active={active} businessHeadId={head} head={headName} heads={heads} people={people} flash={flash} />}

@@ -70,6 +70,47 @@ function GiveDialog({ employeeId, employeeName, types, stock, onTypesChanged, on
   </Dialog>;
 }
 
+/** Give the same item to one or many people at once (for example lab coats for a team). */
+function GiveManyDialog({ people, types, defaultCompany, onTypesChanged, onClose, onSaved }: { people: any[]; types: ItemType[]; defaultCompany: string; onTypesChanged: () => void; onClose: () => void; onSaved: (count: number) => void }) {
+  const active = types.filter(type => type.active);
+  const [typeId, setTypeId] = useState(active[0]?.id || ""); const [newName, setNewName] = useState("");
+  const [details, setDetails] = useState(""); const [quantity, setQuantity] = useState("1"); const [issuedOn, setIssuedOn] = useState(todayIndia()); const [note, setNote] = useState("");
+  const [search, setSearch] = useState(""); const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState(false); const [error, setError] = useState("");
+  const working = useMemo(() => people.filter(person => ["probation", "active", "notice_period"].includes(String(person.status).trim().toLowerCase().replaceAll(" ", "_")) && (!defaultCompany || person.businessHeadId === defaultCompany)), [people, defaultCompany]);
+  const shown = useMemo(() => { const q = search.trim().toLowerCase(); return (q ? working.filter(person => `${person.name} ${person.code} ${person.head} ${person.role || ""}`.toLowerCase().includes(q)) : working).slice(0, 400); }, [working, search]);
+  const toggle = (id: string) => setPicked(current => { const next = new Set(current); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  async function addType() {
+    setBusy(true); setError("");
+    try { const created = await send("/api/staff-items/types", "POST", { name: newName }); await onTypesChanged(); setTypeId(created.id); setNewName(""); } catch (problem) { setError((problem as Error).message); }
+    setBusy(false);
+  }
+  async function submit(event: FormEvent) {
+    event.preventDefault(); setBusy(true); setError("");
+    try { const result = await send("/api/staff-items/bulk", "POST", { employeeIds: [...picked], itemTypeId: typeId, details, quantity: Number(quantity), issuedOn, note }); onSaved(result.created); }
+    catch (problem) { setError((problem as Error).message); setBusy(false); }
+  }
+  return <Dialog title="Give an item" onClose={onClose}>
+    <form className="form-grid" onSubmit={submit}>
+      <label className="span-two">What is being given?<select value={typeId} onChange={event => setTypeId(event.target.value)} required>{active.map(type => <option key={type.id} value={type.id}>{type.name}</option>)}</select></label>
+      <label className="span-two">Not in the list? Add a new kind of item<span className="items-addtype"><input value={newName} onChange={event => setNewName(event.target.value)} placeholder="For example Tablet, Apron, Helmet" maxLength={60} /><button type="button" className="secondary" disabled={busy || newName.trim().length < 2} onClick={addType}>＋ Add to the list</button></span></label>
+      <label className="span-two">Details (make, model, serial / IMEI, SIM number, size)<input value={details} onChange={event => setDetails(event.target.value)} maxLength={300} placeholder="Dell Latitude 5420, serial ABC123" /></label>
+      <label>Quantity for each person<input type="number" min={1} max={999} step={1} value={quantity} onChange={event => setQuantity(event.target.value)} required /></label>
+      <label>Date given<input type="date" max={todayIndia()} value={issuedOn} onChange={event => setIssuedOn(event.target.value)} required /></label>
+      <label className="span-two">Note (optional)<input value={note} onChange={event => setNote(event.target.value)} maxLength={500} /></label>
+      <div className="span-two items-people-box">
+        <div className="items-people-head"><b>Who is it given to? <span className="items-count">{picked.size} chosen</span></b>
+          <span><button type="button" className="items-btn" onClick={() => setPicked(current => new Set([...current, ...shown.map(person => person.id)]))}>Choose all shown ({shown.length})</button><button type="button" className="items-btn" disabled={!picked.size} onClick={() => setPicked(new Set())}>Clear</button></span></div>
+        <input className="items-people-search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Search name, code or company" aria-label="Search people" />
+        <div className="items-people-list">{shown.map(person => <label key={person.id} className={picked.has(person.id) ? "picked" : ""}><input type="checkbox" checked={picked.has(person.id)} onChange={() => toggle(person.id)} /><span><b>{person.name}</b><small>{[person.code, person.head, person.role].filter(Boolean).join(" · ")}</small></span></label>)}{!shown.length && <p className="cleanup-empty">No one found.</p>}</div>
+        {picked.size > 1 && <div className="form-hint">The same details and quantity are recorded for each of the {picked.size} people. For phones or SIM cards that each have their own number, give them one person at a time.</div>}
+      </div>
+      {error && <div className="form-error span-two">{error}</div>}
+      <div className="modal-actions span-two"><button type="button" className="secondary" onClick={onClose}>Cancel</button><button className="primary" disabled={busy || !typeId || !picked.size}>{busy ? "Saving…" : picked.size > 1 ? `Give to ${picked.size} people` : "Save"}</button></div>
+    </form>
+  </Dialog>;
+}
+
 const ACTION_TITLE: Record<string, string> = { returned: "Mark as returned", lost: "Mark as lost", damaged: "Mark as damaged", reopen: "Put back with the person" };
 function StatusDialog({ item, action, onClose, onSaved }: { item: any; action: string; onClose: () => void; onSaved: () => void }) {
   const [on, setOn] = useState(todayIndia()); const [note, setNote] = useState(""); const [busy, setBusy] = useState(false); const [error, setError] = useState("");
@@ -185,14 +226,14 @@ function StockDialog({ heads, defaultHeadId, types, preset, onClose, onSaved }: 
   </Dialog>;
 }
 
-export function CompanyItemsWorkspace({ businessHeadId, head, heads, canWrite, flash }: { businessHeadId: string; head: string; heads: Head[]; canWrite: boolean; flash: (message: string) => void }) {
+export function CompanyItemsWorkspace({ businessHeadId, head, heads, people = [], canWrite, flash }: { businessHeadId: string; head: string; heads: Head[]; people?: any[]; canWrite: boolean; flash: (message: string) => void }) {
   const [tab, setTab] = useState<Tab>("items");
   const [types, setTypes] = useState<ItemType[]>([]);
   const [rows, setRows] = useState<any[] | null>(null);
   const [stock, setStock] = useState<{ rows: any[]; entries: any[] } | null>(null);
   const [error, setError] = useState("");
   const [status, setStatus] = useState("with_staff"); const [typeId, setTypeId] = useState(""); const [search, setSearch] = useState("");
-  const [dialog, setDialog] = useState<null | { kind: "status"; item: any; action: string } | { kind: "edit"; item: any } | { kind: "stock"; preset?: any }>(null);
+  const [dialog, setDialog] = useState<null | { kind: "status"; item: any; action: string } | { kind: "edit"; item: any } | { kind: "stock"; preset?: any } | { kind: "give" }>(null);
   const [newType, setNewType] = useState(""); const [busy, setBusy] = useState(false);
   const company = businessHeadId && businessHeadId !== "all" ? businessHeadId : "";
 
@@ -236,8 +277,8 @@ export function CompanyItemsWorkspace({ businessHeadId, head, heads, canWrite, f
     {error && <p className="cleanup-error">{error}</p>}
 
     {tab === "items" && <section className="panel">
-      <div className="panel-head padded"><div><h2>Items given to staff</h2><p>{rows ? `${rows.length} record${rows.length === 1 ? "" : "s"} · ${counts.people} people · ${counts.pieces} pieces` : "Loading…"}. To give a new item, open the person in Staff and use the Company items tab.</p></div>
-        <button className="primary" disabled={!rows?.length} onClick={() => download("company-items.csv", itemsCsv(rows || []))}>Download for Excel</button></div>
+      <div className="panel-head padded"><div><h2>Items given to staff</h2><p>{rows ? `${rows.length} record${rows.length === 1 ? "" : "s"} · ${counts.people} people · ${counts.pieces} pieces` : "Loading…"}. Use <b>＋ Give an item</b> here (one person or many), or the Company items tab on a staff record.</p></div>
+        <div className="items-head-buttons"><button className="secondary" disabled={!rows?.length} onClick={() => download("company-items.csv", itemsCsv(rows || []))}>Download for Excel</button>{canWrite && <button className="primary" onClick={() => setDialog({ kind: "give" })}>＋ Give an item</button>}</div></div>
       <div className="items-filters">
         <div className="items-chips">{([["with_staff", "With staff"], ["all", "All"], ["returned", "Returned"], ["damaged", "Damaged"], ["lost", "Lost"]] as [string, string][]).map(([key, label]) => <button key={key} className={status === key ? "active" : ""} onClick={() => setStatus(key)}>{label}</button>)}</div>
         <select value={typeId} onChange={event => setTypeId(event.target.value)} aria-label="Item"><option value="">All items</option>{types.map(type => <option key={type.id} value={type.id}>{type.name}</option>)}</select>
@@ -280,6 +321,7 @@ export function CompanyItemsWorkspace({ businessHeadId, head, heads, canWrite, f
       {canWrite && <form className="items-addtype padded" onSubmit={addType}><input value={newType} onChange={event => setNewType(event.target.value)} placeholder="New kind of item, for example Tablet" maxLength={60} aria-label="New item type" /><button className="primary" disabled={busy || newType.trim().length < 2}>＋ Add to the list</button></form>}
     </section>}
 
+    {dialog?.kind === "give" && <GiveManyDialog people={people} types={types} defaultCompany={company} onTypesChanged={loadTypes} onClose={() => setDialog(null)} onSaved={count => { flash(count === 1 ? "Item recorded." : `Item given to ${count} people.`); refreshAll(); }} />}
     {dialog?.kind === "status" && <StatusDialog item={dialog.item} action={dialog.action} onClose={() => setDialog(null)} onSaved={() => { flash("Saved."); refreshAll(); }} />}
     {dialog?.kind === "edit" && <EditDialog item={dialog.item} onClose={() => setDialog(null)} onSaved={() => { flash("Details corrected."); refreshAll(); }} />}
     {dialog?.kind === "stock" && <StockDialog heads={shownHeads.length ? shownHeads : heads} defaultHeadId={company || "all"} types={types} preset={dialog.preset} onClose={() => setDialog(null)} onSaved={() => { flash("Stock saved."); refreshAll(); }} />}
