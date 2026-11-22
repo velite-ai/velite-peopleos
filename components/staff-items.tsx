@@ -218,6 +218,16 @@ export function CompanyItemsWorkspace({ businessHeadId, head, heads, canWrite, f
     try { await send(`/api/staff-items/types/${type.id}`, "PATCH", { active: !type.active }); await loadTypes(); } catch (problem) { flash((problem as Error).message); }
   }
   const shownHeads = company ? heads.filter(item => item.id === company) : heads;
+  // One block per person: the name is shown once and their items are listed under it.
+  const groups = useMemo(() => {
+    const map = new Map<string, { id: string; name: string; code: string; company: string; left: boolean; items: any[] }>();
+    for (const row of rows || []) {
+      let group = map.get(row.employee_id);
+      if (!group) { group = { id: row.employee_id, name: row.employee_name, code: row.employee_code, company: row.business_head, left: !["probation", "active", "notice_period"].includes(row.employee_status), items: [] }; map.set(row.employee_id, group); }
+      group.items.push(row);
+    }
+    return [...map.values()];
+  }, [rows]);
   const counts = useMemo(() => ({ people: new Set((rows || []).map(row => row.employee_id)).size, pieces: (rows || []).reduce((sum, row) => sum + Number(row.quantity || 0), 0) }), [rows]);
 
   return <>
@@ -233,13 +243,18 @@ export function CompanyItemsWorkspace({ businessHeadId, head, heads, canWrite, f
         <select value={typeId} onChange={event => setTypeId(event.target.value)} aria-label="Item"><option value="">All items</option>{types.map(type => <option key={type.id} value={type.id}>{type.name}</option>)}</select>
         <input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search name, code or details" aria-label="Search" />
       </div>
-      <div className="items-table">
-        {(rows || []).map(row => <div className="items-row" key={row.id}>
-          <div className="items-main"><b>{row.employee_name}</b><small>{[row.employee_code, row.business_head, ["probation", "active", "notice_period"].includes(row.employee_status) ? "" : "Has left"].filter(Boolean).join(" · ")}</small></div>
-          <div className="items-main"><b>{row.type_name}{row.quantity > 1 ? ` × ${row.quantity}` : ""}</b>{row.details && <span>{row.details}</span>}<small>Given {niceDate(row.issued_on)}{row.status !== "with_staff" && row.status_on ? ` · ${STATUS_LABEL[row.status as keyof typeof STATUS_LABEL]} ${niceDate(row.status_on)}` : ""}</small></div>
-          <span className={statusClass(row.status)}>{STATUS_LABEL[row.status as keyof typeof STATUS_LABEL]}</span>
-          {canWrite && <div className="items-actions"><ItemButtons item={row} onAction={action => setDialog(action === "edit" ? { kind: "edit", item: row } : { kind: "status", item: row, action })} /></div>}
-        </div>)}
+      <div className="items-groups">
+        {groups.length > 0 && <div className="items-line items-head"><span>ITEM</span><span>DETAILS</span><span>GIVEN</span><span>STATUS</span><span></span></div>}
+        {groups.map(group => <section className="items-group" key={group.id}>
+          <header className="items-person"><b>{group.name}</b><small>{[group.code, group.company, group.left ? "Has left" : ""].filter(Boolean).join(" · ")}</small><em>{group.items.length} item{group.items.length === 1 ? "" : "s"}</em></header>
+          {group.items.map(row => <div className="items-line" key={row.id}>
+            <b>{row.type_name}{row.quantity > 1 ? ` × ${row.quantity}` : ""}</b>
+            <span>{row.details || "—"}{row.note ? <small>{row.note}</small> : null}</span>
+            <span>{niceDate(row.issued_on)}{row.status !== "with_staff" && row.status_on ? <small>{STATUS_LABEL[row.status as keyof typeof STATUS_LABEL]} {niceDate(row.status_on)}</small> : null}</span>
+            <span className={statusClass(row.status)}>{STATUS_LABEL[row.status as keyof typeof STATUS_LABEL]}</span>
+            {canWrite ? <div className="items-actions"><ItemButtons item={row} onAction={action => setDialog(action === "edit" ? { kind: "edit", item: row } : { kind: "status", item: row, action })} /></div> : <span></span>}
+          </div>)}
+        </section>)}
         {rows && !rows.length && <p className="cleanup-empty">Nothing found. Items are added from a staff record: open the person, then the Company items tab.</p>}
       </div>
     </section>}

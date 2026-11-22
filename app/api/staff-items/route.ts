@@ -19,6 +19,6 @@ export async function GET(request: Request) {
       FROM staff_items i JOIN employees e ON e.id = i.employee_id JOIN business_heads b ON b.id = e.business_head_id JOIN staff_item_types t ON t.id = i.item_type_id
       WHERE (${head}::uuid IS NULL OR e.business_head_id = ${head}::uuid) AND (${typeId}::uuid IS NULL OR t.id = ${typeId}::uuid) AND (${status}::text IS NULL OR i.status = ${status})
         AND (${like}::text IS NULL OR concat_ws(' ', e.first_name, e.last_name) ILIKE ${like} OR e.employee_code ILIKE ${like} OR i.details ILIKE ${like})
-      ORDER BY lower(concat_ws(' ', e.first_name, e.last_name)), t.sort_order, i.issued_on DESC LIMIT 3000`);
+      ORDER BY lower(concat_ws(' ', e.first_name, e.last_name)), e.id, t.sort_order, i.issued_on DESC LIMIT 3000`);
   } catch (error) { return apiError(error); }
 }
