@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { MOVES_WITH_PERSON } from "../lib/company-correction-rules.ts";
-import { describeItems, eventFor, inStock, itemsCsv, itemsStillWithStaff, nextStatus, parseEdit, parseIssue, parseStatusChange, parseStockEntry, parseTypeName, stockCsv } from "../lib/staff-item-rules.ts";
+import { parseBulkGive, describeItems, eventFor, inStock, itemsCsv, itemsStillWithStaff, nextStatus, parseEdit, parseIssue, parseStatusChange, parseStockEntry, parseTypeName, stockCsv } from "../lib/staff-item-rules.ts";
 
 const TYPE = "3b1f2c4e-5d6a-4b7c-8d9e-0a1b2c3d4e5f";
 const TODAY = "2026-11-20";
@@ -90,4 +90,15 @@ test("CSV downloads: BOM, header, status words, formulas made safe", () => {
 
 test("changing a person's company is not blocked by their company items: the items move with them", () => {
   assert.ok("staff_items" in MOVES_WITH_PERSON);
+});
+
+test("giving one item to many people: the people list and the item are both checked", () => {
+  const other = "4c2d3e5f-6a7b-4c8d-9e0f-1a2b3c4d5e6f";
+  const good = parseBulkGive({ employeeIds: [TYPE, other, TYPE], itemTypeId: TYPE, quantity: 2, issuedOn: TODAY, details: "Size M" }, TODAY);
+  assert.equal(good.ok, true); assert.deepEqual(good.employeeIds, [TYPE, other]); assert.equal(good.value.quantity, 2);
+  assert.match(parseBulkGive({ employeeIds: [], itemTypeId: TYPE, quantity: 1, issuedOn: TODAY }, TODAY).message, /at least one/);
+  assert.match(parseBulkGive({ itemTypeId: TYPE, quantity: 1, issuedOn: TODAY }, TODAY).message, /at least one/);
+  assert.match(parseBulkGive({ employeeIds: ["nope"], itemTypeId: TYPE, quantity: 1, issuedOn: TODAY }, TODAY).message, /not valid/);
+  assert.match(parseBulkGive({ employeeIds: Array.from({ length: 201 }, (_, i) => `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`), itemTypeId: TYPE, quantity: 1, issuedOn: TODAY }, TODAY).message, /200/);
+  assert.match(parseBulkGive({ employeeIds: [TYPE], itemTypeId: TYPE, quantity: 0, issuedOn: TODAY }, TODAY).message, /Quantity/);
 });

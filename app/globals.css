@@ -474,4 +474,17 @@ main[data-area="diwali-gifts"]{page:diwali}
 .items-line.items-head{font-size:12px;font-weight:700;color:#4d5a53;border-top:0;padding:4px 14px 0;background:none}
 .items-groups>.items-line.items-head{padding-left:14px}
 @media (max-width:900px){.items-line{grid-template-columns:1fr 1fr}.items-line.items-head{display:none}.items-line .items-actions{grid-column:1 / -1;justify-content:flex-start}}
+/* Give an item to one or many people */
+.items-people-box{display:flex;flex-direction:column;gap:8px}
+.items-people-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px}
+.items-people-head>span{display:flex;gap:6px}
+.items-count{font-weight:400;color:#4d5a53;margin-left:6px}
+.items-people-search{height:42px;border:1px solid #cdd6d1;border-radius:8px;padding:0 10px;font-size:15px}
+.items-people-list{max-height:260px;overflow:auto;border:1px solid #e0e6e2;border-radius:8px}
+.items-people-list label{display:flex;gap:10px;align-items:center;padding:8px 12px;border-top:1px solid #eef1ee;cursor:pointer;font-size:15px}
+.items-people-list label:first-child{border-top:0}
+.items-people-list label.picked{background:#f4f1ec}
+.items-people-list input{width:18px;height:18px;flex:none}
+.items-people-list b{display:block}
+.items-people-list small{display:block;color:#5b6a62;font-size:13px}
 
