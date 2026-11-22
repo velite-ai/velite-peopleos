@@ -458,3 +458,20 @@ main[data-area="diwali-gifts"]{page:diwali}
 @media (max-width:760px){.items-row,.items-card .items-row{grid-template-columns:1fr}.items-stock .items-row{grid-template-columns:repeat(2,1fr)}.items-stock .items-head{display:none}}
 @media print{.items-actions,.items-history-toggle,.items-tabs,.items-filters{display:none!important}}
 .items-stock .items-row>span>small{display:block;color:#4d5a53;font-size:13px;font-weight:400}
+/* Company items page: one block per person, items listed under the name */
+.items-groups{padding:0 18px 14px}
+.items-group{border:1px solid #e0e6e2;border-radius:10px;margin:10px 0;overflow:hidden;background:#fff}
+.items-person{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 12px;padding:10px 14px;background:#f4f1ec;border-bottom:1px solid #e0e6e2}
+.items-person b{font-size:17px}
+.items-person small{color:#4d5a53;font-size:14px}
+.items-person em{margin-left:auto;font-style:normal;color:#4d5a53;font-size:13px}
+.items-line{display:grid;grid-template-columns:minmax(130px,1fr) minmax(170px,1.5fr) minmax(110px,.7fr) 96px minmax(230px,1.3fr);gap:6px 14px;align-items:center;padding:9px 14px;border-top:1px solid #eef1ee}
+.items-person+.items-line{border-top:0}
+.items-line>span{overflow-wrap:anywhere;font-size:15px}
+.items-line small{display:block;color:#5b6a62;font-size:13px}
+.items-line .items-actions{grid-column:auto;justify-content:flex-end}
+.items-line .items-btn{padding:5px 10px;font-size:13px}
+.items-line.items-head{font-size:12px;font-weight:700;color:#4d5a53;border-top:0;padding:4px 14px 0;background:none}
+.items-groups>.items-line.items-head{padding-left:14px}
+@media (max-width:900px){.items-line{grid-template-columns:1fr 1fr}.items-line.items-head{display:none}.items-line .items-actions{grid-column:1 / -1;justify-content:flex-start}}
+
